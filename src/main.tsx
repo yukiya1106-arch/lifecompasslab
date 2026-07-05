@@ -22,8 +22,6 @@ const navItems = [
   { label: "Contact", href: "#/contact" },
 ];
 
-const categoryFilters = ["すべて", "住宅購入", "退職後資金", "ライフプラン", "家計管理", "資産形成", "教育費", "保険", "相続"];
-const statuses: ToolStatus[] = ["公開中", "開発中", "構想中"];
 const contactFormUrl =
   "https://docs.google.com/forms/d/e/1FAIpQLSdQcwYaLeJNPLQ9LnV-Js7yINfEnwlUNy0068YYGA8U3JbfCg/viewform?usp=dialog";
 
