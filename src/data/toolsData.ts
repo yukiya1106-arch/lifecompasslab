@@ -1,0 +1,67 @@
+export type ToolStatus = "公開中" | "開発中" | "構想中";
+export type ToolIcon = "home" | "compass" | "chart";
+
+export type Tool = {
+  title: string;
+  category: string;
+  categories: string[];
+  status: ToolStatus;
+  description: string;
+  url: string;
+  buttonLabel: string;
+  icon: ToolIcon;
+  featured: boolean;
+};
+
+export const categoryFilters = [
+  "すべて",
+  "住宅購入",
+  "退職後資金",
+  "ライフプラン",
+  "家計管理",
+  "資産形成",
+  "教育費",
+  "保険",
+  "相続",
+];
+
+export const statuses: ToolStatus[] = ["公開中", "開発中", "構想中"];
+
+export const tools: Tool[] = [
+  {
+    title: "家計コンパスHOME",
+    category: "住宅購入",
+    categories: ["住宅購入", "家計管理"],
+    status: "公開中",
+    description:
+      "物件価格やローン返済額だけでなく、管理費、修繕積立金、駐車場、固定資産税まで一括で整理。最大3件の物件情報をAIで解析し、「買えるか」だけでなく、「わが家にフィットする物件か」を確認するための住宅購入支援ツールです。",
+    url: "https://home-201056094402.asia-east1.run.app/",
+    buttonLabel: "試してみる",
+    icon: "home",
+    featured: true,
+  },
+  {
+    title: "リタイアメントCOMPASS",
+    category: "退職後資金 / 年金 / 税金",
+    categories: ["退職後資金", "資産形成"],
+    status: "公開中",
+    description:
+      "退職後の資金計画、税金、年金受取時期など、老後の生活設計における「お金の確認」を目的別にサポートするシミュレーションプラットフォームです。退職金、企業型DC、iDeCo、公的年金など、退職前後に整理しておきたい論点を見える化します。",
+    url: "https://remix-compass-201056094402.asia-east1.run.app/",
+    buttonLabel: "試してみる",
+    icon: "compass",
+    featured: true,
+  },
+  {
+    title: "家計コンパスmini",
+    category: "ライフプラン / 家計管理",
+    categories: ["ライフプラン", "家計管理"],
+    status: "公開中",
+    description:
+      "簡易的なライフプランシミュレーションツールです。細かい入力をしすぎず、将来のお金の流れをサクッと確認できます。まずは大まかな方向性をつかみたい方向けの、軽量版シミュレーターです。",
+    url: "https://e8dc0699-0510-4583-a144-b3979889542c.vip.gensparksite.com/",
+    buttonLabel: "試してみる",
+    icon: "chart",
+    featured: true,
+  },
+];
