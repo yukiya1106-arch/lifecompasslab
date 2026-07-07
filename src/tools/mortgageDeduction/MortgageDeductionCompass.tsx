@@ -1367,10 +1367,10 @@ export default function App() {
                         key={mode.key}
                         type="button"
                         onClick={() => setInputs({ ...inputs, loanType: mode.key as any })}
-                        className={`py-1.5 rounded border text-center text-xs font-medium transition-colors cursor-pointer ${
+                        className={`py-1.5 rounded border text-center text-xs font-bold transition-colors cursor-pointer ${
                           inputs.loanType === mode.key
-                            ? 'bg-blue-50 border-blue-200 text-blue-800'
-                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                            ? 'bg-navy border-navy text-white shadow-sm ring-2 ring-[#BBD7FF]'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800'
                         }`}
                       >
                         {mode.label}
@@ -2504,8 +2504,8 @@ export default function App() {
                       onClick={() => setYearlyGraphFilter(filter.key as any)}
                       className={`px-3 py-1 rounded-md transition-all cursor-pointer font-semibold ${
                         yearlyGraphFilter === filter.key
-                          ? 'bg-blue-600 text-white shadow-xs'
-                          : 'text-slate-600 hover:bg-slate-100'
+                          ? 'bg-navy text-white shadow-sm ring-2 ring-[#BBD7FF]'
+                          : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
                       }`}
                     >
                       {filter.label}
