@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { labLogs, type LabLog } from "./data/labLogData";
 import { categoryFilters, statuses, tools, type Tool, type ToolIcon, type ToolStatus } from "./data/toolsData";
+import MortgageDeductionCompass from "./tools/mortgageDeduction/MortgageDeductionCompass";
 import "./styles.css";
 
 const navItems = [
@@ -38,6 +39,7 @@ function App() {
     <div className="min-h-screen bg-white text-ink">
       <Header />
       <main>
+        {route === "mortgage-deduction-compass" && <MortgageDeductionCompass />}
         {route === "tools" && <ToolsPage />}
         {route === "lab-log" && <LabLogPage />}
         {route === "data" && <DataPage />}
@@ -50,6 +52,7 @@ function App() {
 }
 
 function getRoute() {
+  if (window.location.hash.startsWith("#/tools/mortgage-deduction-compass")) return "mortgage-deduction-compass";
   if (window.location.hash.startsWith("#/tools")) return "tools";
   if (window.location.hash.startsWith("#/lab-log")) return "lab-log";
   if (window.location.hash.startsWith("#/data")) return "data";

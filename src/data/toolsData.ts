@@ -64,4 +64,16 @@ export const tools: Tool[] = [
     icon: "chart",
     featured: true,
   },
+  {
+    title: "住宅ローン控除COMPASS",
+    category: "住宅購入 / 税金",
+    categories: ["住宅購入", "家計管理"],
+    status: "公開中",
+    description:
+      "ペアローン、育休、住宅性能、所得税・住民税の想定から、住宅ローン控除をどのくらい使い切れるかを見える化する概算シミュレーターです。控除可能額、実際に使える控除額、使い切れない控除額を世帯・夫婦別に確認できます。",
+    url: "#/tools/mortgage-deduction-compass",
+    buttonLabel: "試してみる",
+    icon: "home",
+    featured: false,
+  },
 ];
