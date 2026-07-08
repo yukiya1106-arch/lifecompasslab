@@ -38,7 +38,7 @@ export const tools: Tool[] = [
     url: "https://home-201056094402.asia-east1.run.app/",
     buttonLabel: "試してみる",
     icon: "home",
-    featured: true,
+    featured: false,
   },
   {
     title: "リタイアメントCOMPASS",
@@ -74,6 +74,6 @@ export const tools: Tool[] = [
     url: "#/tools/mortgage-deduction-compass",
     buttonLabel: "試してみる",
     icon: "home",
-    featured: false,
+    featured: true,
   },
 ];

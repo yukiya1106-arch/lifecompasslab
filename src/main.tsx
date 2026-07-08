@@ -88,7 +88,12 @@ function Header() {
 }
 
 function HomePage() {
-  const featuredTools = tools.filter((tool) => tool.featured).slice(0, 3);
+  const featuredTools = [
+    tools.find((tool) => tool.url === "#/tools/mortgage-deduction-compass"),
+    ...tools.filter((tool) => tool.featured && tool.url !== "#/tools/mortgage-deduction-compass"),
+  ]
+    .filter((tool): tool is Tool => Boolean(tool))
+    .slice(0, 3);
 
   return (
     <>
