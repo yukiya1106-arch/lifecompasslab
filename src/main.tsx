@@ -43,6 +43,7 @@ function App() {
         {route === "tools" && <ToolsPage />}
         {route === "lab-log" && <LabLogPage />}
         {route === "data" && <DataPage />}
+        {route === "about-site" && <AboutSitePage />}
         {route === "contact" && <ContactPage />}
         {route === "home" && <HomePage />}
       </main>
@@ -56,6 +57,7 @@ function getRoute() {
   if (window.location.hash.startsWith("#/tools")) return "tools";
   if (window.location.hash.startsWith("#/lab-log")) return "lab-log";
   if (window.location.hash.startsWith("#/data")) return "data";
+  if (window.location.hash.startsWith("#/about-site")) return "about-site";
   if (window.location.hash.startsWith("#/contact")) return "contact";
   return "home";
 }
@@ -328,6 +330,42 @@ function DataPage() {
   );
 }
 
+function AboutSitePage() {
+  return (
+    <PageShell
+      eyebrow="ABOUT THIS SITE"
+      title="このサイトについて"
+      lead="LIFE COMPASS LABの運営目的と位置づけについてまとめています。"
+    >
+      <PolicyBlock title="個人運営の研究・開発プロジェクトです">
+        <p>
+          LIFE COMPASS LABは、人生のお金に関する意思決定を少しでも分かりやすくするための、個人運営による研究・開発プロジェクトです。
+        </p>
+        <p>
+          家計、住宅、退職金、相続、教育費、老後資金など、人生の節目で迷いやすいテーマについて、考え方の整理や概算シミュレーションを行うためのツール・コンテンツを制作しています。
+        </p>
+        <p>
+          本サイトは、所属組織、勤務先、提携金融機関、取引先その他の団体とは関係ありません。
+          掲載内容は、運営者個人の見解・試作・研究に基づくものであり、所属組織等の公式見解ではありません。
+        </p>
+        <p>
+          本サイトは、特定の金融商品、保険商品、証券会社、金融機関、不動産、投資手法等の勧誘・推奨を目的とするものではありません。
+        </p>
+        <p>
+          本サイト上で、金融商品の購入、証券口座の開設、保険契約、不動産取引等の案内・媒介・取次ぎは行いません。
+        </p>
+        <p>
+          現時点で、本サイトには金融商品、証券口座、保険商品等に関する広告、アフィリエイトリンク、紹介リンク、個別相談の受付窓口は設置していません。
+        </p>
+        <p>
+          各種ツールの試算結果は、入力条件に基づく概算であり、実際の税額、控除額、社会保険料、住宅ローン審査、相続税額等とは異なる場合があります。
+          実際の判断にあたっては、必要に応じて各専門家・金融機関・公的機関等にご確認ください。
+        </p>
+      </PolicyBlock>
+    </PageShell>
+  );
+}
+
 function ContactPage() {
   return (
     <section className="relative isolate min-h-[70svh] overflow-hidden bg-[linear-gradient(180deg,#FFFFFF_0%,#F8FBFF_100%)] py-20 md:py-28">
@@ -548,7 +586,12 @@ function Footer() {
           <p className="mb-1 font-semibold tracking-[0.12em] text-navy">LIFE COMPASS LAB</p>
           <p>人生の選択に、道しるべを。</p>
         </div>
-        <p>© 2026 LIFE COMPASS LAB</p>
+        <div className="flex flex-col gap-2 md:items-end">
+          <a href="#/about-site" className="text-xs font-semibold text-sub transition hover:text-navy">
+            このサイトについて
+          </a>
+          <p>© 2026 LIFE COMPASS LAB</p>
+        </div>
       </div>
     </footer>
   );
