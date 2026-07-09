@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>年金受取シミュレーター</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+/* ============================================================
+   基本設定・変数
+============================================================ */
+:root{
+  /* LIFE COMPASS LAB ロゴ準拠のブルーパレット */
+  --primary:#0d4a8f;        /* コンパス外枠・LIFE COMPASSの文字色に近いネイビーブルー */
+  --primary-dark:#002f6c;   /* より濃いネイビー（ロゴの最も濃い部分） */
+  --primary-light:#e8f1fc;  /* 薄い水色背景 */
+  --accent:#5499f5;         /* LABの文字色・針のライトブルー（アクセント） */
+  --accent-dark:#2f74d6;    /* アクセントの濃色版 */
+  --bg:#f4f7fb;             /* 全体背景（わずかに青みのある白) */
+  --card-bg:#ffffff;
+  --text:#1c2733;
+  --muted:#5b6b82;
+  --border:#dbe4f0;
+  --danger-soft:#b4573f;
+  --good-soft:#2f74d6;
+  --radius:14px;
+  --shadow:0 2px 10px rgba(13,74,143,0.08);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+img,svg{max-width:100%;}
+button{font-family:inherit;}
+.container{max-width:1180px;margin:0 auto;padding:0 20px;}
+
+/* ============================================================
+   ヘッダー
+============================================================ */
+#app-header{
+  background:linear-gradient(135deg,var(--primary-dark),var(--primary));
+  color:#fff;
+  padding:20px 0 22px;
+}
+.brand-row{
+  display:flex;
+  margin-bottom:16px;
+}
+.brand-logo{
+  height:40px;
+  width:auto;
+  background:#fff;
+  padding:6px 14px;
+  border-radius:8px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.12);
+}
+#app-header h1{
+  margin:0 0 6px;
+  font-size:1.65rem;
+  font-weight:900;
+  letter-spacing:.02em;
+  display:flex;align-items:center;gap:10px;
+}
+#app-header h1 .icon{font-size:1.5rem;}
+#app-header .subcopy{
+  margin:0 0 14px;
+  font-size:.98rem;
+  color:#dceaff;
+  font-weight:500;
+}
+.disclaimer-banner{
+  background:rgba(255,255,255,0.14);
+  border:1px solid rgba(255,255,255,0.28);
+  border-radius:10px;
+  padding:10px 14px;
+  font-size:.82rem;
+  color:#fff;
+  display:flex;
+  gap:8px;
+  align-items:flex-start;
+}
+.disclaimer-banner .dot{font-size:1rem;line-height:1.2;}
+
+/* ============================================================
+   タブ
+============================================================ */
+#tab-nav{
+  display:flex;
+  gap:8px;
+  max-width:1180px;
+  margin:18px auto 0;
+  padding:0 20px;
+}
+.tab-btn{
+  flex:1;
+  padding:13px 10px;
+  border:none;
+  border-radius:12px 12px 0 0;
+  background:#dbe6f5;
+  color:var(--muted);
+  font-weight:700;
+  font-size:.95rem;
+  cursor:pointer;
+  transition:.15s;
+}
+.tab-btn.active{
+  background:var(--card-bg);
+  color:var(--primary-dark);
+  box-shadow:0 -2px 8px rgba(0,0,0,0.04);
+}
+.tab-btn:hover{color:var(--primary-dark);}
+main{padding:0 0 60px;}
+.tab-panel{
+  background:var(--card-bg);
+  padding:22px 0 10px;
+}
+.tab-panel[hidden]{display:none;}
+
+/* ============================================================
+   共通：セクション、カード
+============================================================ */
+.section-title{
+  font-size:1.05rem;
+  font-weight:700;
+  color:var(--primary-dark);
+  margin:26px 0 12px;
+  display:flex;align-items:center;gap:8px;
+  border-left:4px solid var(--accent);
+  padding-left:10px;
+}
+.panel{
+  background:var(--card-bg);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:18px 20px;
+  box-shadow:var(--shadow);
+}
+.input-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+  gap:16px 20px;
+}
+.field label{
+  display:block;
+  font-size:.82rem;
+  font-weight:600;
+  color:var(--muted);
+  margin-bottom:6px;
+}
+.field .hint{
+  font-size:.72rem;
+  color:#7086a3;
+  margin-top:4px;
+}
+input[type=number],select{
+  width:100%;
+  padding:9px 11px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  font-size:.95rem;
+  background:#fbfcfe;
+  color:var(--text);
+}
+input[type=number]:focus,select:focus{
+  outline:2px solid var(--primary);
+  outline-offset:1px;
+}
+.radio-group{display:flex;flex-wrap:wrap;gap:8px;}
+.radio-chip{
+  border:1px solid var(--border);
+  background:#fbfcfe;
+  border-radius:20px;
+  padding:7px 14px;
+  font-size:.85rem;
+  cursor:pointer;
+  display:flex;align-items:center;gap:6px;
+  transition:.15s;
+}
+.radio-chip input{margin:0;accent-color:var(--primary);}
+.radio-chip.checked{
+  background:var(--primary-light);
+  border-color:var(--primary);
+  color:var(--primary-dark);
+  font-weight:700;
+}
+.toggle-row{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:10px 14px;
+  background:#fbfcfe;
+}
+
+/* 入力モード切替（かんたん入力／詳細入力） */
+.input-mode-toggle{
+  display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;
+}
+.mode-btn{
+  flex:1;min-width:200px;
+  border:1.5px solid var(--border);
+  background:#fbfcfe;
+  color:var(--muted);
+  padding:10px 14px;
+  border-radius:10px;
+  font-weight:700;
+  font-size:.85rem;
+  cursor:pointer;
+  transition:.15s;
+  text-align:center;
+}
+.mode-btn.active{
+  background:var(--primary);
+  border-color:var(--primary);
+  color:#fff;
+}
+.mode-btn:hover:not(.active){border-color:var(--primary);color:var(--primary-dark);}
+
+/* 推計結果ボックス */
+.estimate-result-box{
+  margin-top:16px;
+  background:linear-gradient(160deg,#fff,#eaf2fc);
+  border:1px solid var(--border);
+  border-left:4px solid var(--primary);
+  border-radius:12px;
+  padding:14px 18px;
+}
+.estimate-result-box .estimate-title{
+  font-size:.82rem;font-weight:700;color:var(--primary-dark);margin-bottom:8px;
+}
+.estimate-result-box .estimate-rows{
+  display:flex;flex-wrap:wrap;gap:14px 28px;margin-bottom:10px;
+}
+.estimate-result-box .estimate-item .k{font-size:.74rem;color:var(--muted);}
+.estimate-result-box .estimate-item .v{font-size:1.05rem;font-weight:800;color:var(--primary-dark);}
+.estimate-result-box .estimate-total{
+  border-top:1px dashed var(--border);padding-top:10px;margin-top:4px;
+  font-size:.86rem;color:var(--text);
+}
+.estimate-result-box .estimate-total strong{color:var(--accent-dark);font-size:1.1rem;}
+.estimate-note{font-size:.72rem;color:#7086a3;margin-top:6px;}
+.switch{position:relative;width:46px;height:25px;flex:0 0 auto;}
+.switch input{opacity:0;width:0;height:0;}
+.slider-track{
+  position:absolute;cursor:pointer;inset:0;
+  background:#b9c8dd;border-radius:30px;transition:.2s;
+}
+.slider-track:before{
+  content:"";position:absolute;height:19px;width:19px;left:3px;top:3px;
+  background:#fff;border-radius:50%;transition:.2s;
+}
+.switch input:checked + .slider-track{background:var(--primary);}
+.switch input:checked + .slider-track:before{transform:translateX(21px);}
+
+/* ============================================================
+   サマリーカード
+============================================================ */
+.summary-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:14px;
+  margin-bottom:22px;
+}
+.summary-card{
+  background:linear-gradient(160deg,#fff,#eaf2fc);
+  border:1px solid var(--border);
+  border-left:4px solid var(--accent);
+  border-radius:var(--radius);
+  padding:16px 18px;
+  box-shadow:var(--shadow);
+}
+.summary-card .label{font-size:.78rem;color:var(--muted);font-weight:600;margin-bottom:6px;}
+.summary-card .value{font-size:1.35rem;font-weight:900;color:var(--primary-dark);}
+.summary-card .sub{font-size:.76rem;color:#6d84a3;margin-top:4px;}
+
+/* ============================================================
+   表
+============================================================ */
+.table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border);}
+table{width:100%;border-collapse:collapse;background:var(--card-bg);font-size:.86rem;min-width:760px;}
+thead th{
+  background:var(--primary-light);
+  color:var(--primary-dark);
+  font-weight:700;
+  padding:10px 8px;
+  text-align:right;
+  white-space:nowrap;
+  border-bottom:2px solid var(--border);
+}
+thead th:first-child{text-align:left;}
+tbody td{
+  padding:9px 8px;
+  text-align:right;
+  border-bottom:1px solid var(--border);
+  white-space:nowrap;
+}
+tbody td:first-child{text-align:left;font-weight:700;}
+tbody tr{cursor:pointer;transition:.12s;}
+tbody tr:hover{background:#f2f7fd;}
+tbody tr.selected-row{background:var(--primary-light);}
+tbody tr.selected-row td:first-child{color:var(--primary-dark);}
+tbody tr.selected-row td{font-weight:700;}
+.col-highlight{background:#e4edfa;}
+
+@media (max-width:720px){
+  table, thead, tbody, th, td, tr{display:block;}
+  table{min-width:0;}
+  thead{position:absolute;left:-9999px;top:-9999px;}
+  tbody tr{
+    border:1px solid var(--border);border-radius:10px;margin-bottom:10px;padding:6px 4px;
+  }
+  tbody td{
+    border:none;border-bottom:1px dashed var(--border);
+    position:relative;padding-left:52%;text-align:right;min-height:30px;
+  }
+  tbody td:last-child{border-bottom:none;}
+  tbody td:before{
+    position:absolute;left:10px;top:9px;width:48%;
+    padding-right:8px;white-space:normal;text-align:left;font-weight:600;
+    color:var(--muted);content:attr(data-label);
+  }
+  tbody td:first-child{padding-left:52%;text-align:right;}
+}
+
+/* ============================================================
+   グラフ
+============================================================ */
+.chart-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:18px 0 26px;
+}
+@media (max-width:900px){.chart-grid{grid-template-columns:1fr;}}
+.chart-card{
+  background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px;box-shadow:var(--shadow);
+}
+.chart-card h3{margin:0 0 10px;font-size:.92rem;color:var(--primary-dark);}
+.chart-card .chart-box{position:relative;height:280px;}
+
+/* ============================================================
+   コメント
+============================================================ */
+.comment-box{
+  background:#f0f6fd;
+  border:1px dashed var(--accent);
+  border-radius:var(--radius);
+  padding:16px 18px;
+  margin:18px 0 6px;
+}
+.comment-box h3{margin:0 0 10px;font-size:.92rem;color:var(--accent-dark);}
+.comment-box ul{margin:0;padding-left:1.1em;}
+.comment-box li{margin-bottom:8px;font-size:.9rem;}
+.comment-box li .tag{
+  display:inline-block;background:var(--primary);color:#fff;font-size:.7rem;
+  border-radius:6px;padding:2px 8px;margin-right:6px;font-weight:700;vertical-align:middle;
+}
+
+/* ============================================================
+   DCタブ：比較カード
+============================================================ */
+.dc-card-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:22px;
+}
+.dc-card{
+  background:var(--card-bg);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px;box-shadow:var(--shadow);position:relative;
+}
+.dc-card.is-selected{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-light);}
+.dc-card .badge{
+  position:absolute;top:-10px;right:14px;background:var(--primary);color:#fff;
+  font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:20px;
+}
+.dc-card h3{margin:0 0 12px;font-size:1rem;color:var(--primary-dark);display:flex;align-items:center;gap:8px;}
+.dc-row{display:flex;justify-content:space-between;font-size:.85rem;padding:6px 0;border-bottom:1px dotted var(--border);gap:10px;}
+.dc-row:last-child{border-bottom:none;}
+.dc-row .k{color:var(--muted);}
+.dc-row .v{font-weight:700;text-align:right;}
+.dc-row.total .v{color:var(--primary-dark);font-size:1.02rem;}
+.dc-sub-title{
+  font-size:.78rem;font-weight:700;color:var(--accent-dark);margin:12px 0 4px;
+  border-top:1px solid var(--border);padding-top:10px;
+}
+.dc-label-row{
+  margin-top:10px;
+  font-size:.76rem;
+  background:var(--primary-light);
+  color:var(--primary-dark);
+  padding:6px 10px;
+  border-radius:8px;
+  font-weight:600;
+}
+
+/* ============================================================
+   フッター / 注意書き
+============================================================ */
+.note-block{
+  font-size:.78rem;color:var(--muted);
+  background:#eaf1fa;border-radius:10px;padding:10px 14px;margin-top:18px;
+}
+.warning-block{
+  font-size:.82rem;color:#7a3623;
+  background:#fbe9e4;border:1px solid #f0c3b3;border-radius:10px;
+  padding:10px 14px;margin:14px 0;
+  display:flex;gap:8px;align-items:flex-start;
+}
+.warning-block[hidden]{display:none;}
+footer{
+  text-align:center;font-size:.76rem;color:#7086a3;padding:24px 0 40px;
+}
+#error-banner{
+  display:none;position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+  background:#5a2a20;color:#fff;padding:10px 18px;border-radius:10px;font-size:.82rem;z-index:999;
+  box-shadow:0 4px 16px rgba(0,0,0,.25);
+}
+.pill{
+  display:inline-block;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:10px;
+  background:var(--primary-light);color:var(--primary-dark);margin-left:6px;
+}
+</style>
+</head>
+<body>
+
+<!-- =========================================================
+     ヘッダー
+========================================================= -->
+<header id="app-header">
+  <div class="container">
+    <div class="brand-row">
+      <img src="images/logo-life-compass-lab-v2.png" alt="LIFE COMPASS LAB" class="brand-logo" loading="eager">
+    </div>
+    <h1><span class="icon">🧭</span>年金受取シミュレーター</h1>
+    <p class="subcopy">受取開始年齢と受け取り方で、手取りの見え方を比較</p>
+    <div class="disclaimer-banner">
+      <span class="dot">⚠️</span>
+      <span>本アプリは<strong>概算</strong>です。実際の税額・保険料・年金額とは異なる場合があります。相談時の話のたたき台としてご利用ください。</span>
+    </div>
+  </div>
+</header>
+
+<!-- タブナビゲーション -->
+<nav id="tab-nav" role="tablist" aria-label="シミュレーター切り替え">
+  <button class="tab-btn active" id="tab-btn-public" role="tab" aria-selected="true" aria-controls="tab-public" onclick="App.switchTab('public')">公的年金</button>
+  <button class="tab-btn" id="tab-btn-dc" role="tab" aria-selected="false" aria-controls="tab-dc" onclick="App.switchTab('dc')">DC / iDeCo</button>
+</nav>
+
+<main class="container">
+
+<!-- =========================================================
+     タブA：公的年金
+========================================================= -->
+<section class="tab-panel" id="tab-public" role="tabpanel" aria-labelledby="tab-btn-public">
+
+  <div class="warning-block" id="public-warning" hidden></div>
+
+  <h2 class="section-title">① 前提条件を入力</h2>
+  <div class="panel">
+
+    <!-- 年金額の入力方法：かんたん入力 / 働き方から概算する -->
+    <div class="input-mode-toggle" role="tablist" aria-label="年金額の入力方法">
+      <button type="button" class="mode-btn active" id="mode-btn-simple" onclick="App.setInputMode('simple')">✍️ かんたん入力（年金額をそのまま入力）</button>
+      <button type="button" class="mode-btn" id="mode-btn-detail" onclick="App.setInputMode('detail')">🧮 働き方から概算する</button>
+    </div>
+
+    <!-- かんたん入力：ねんきん定期便の年額をそのまま入力 -->
+    <div id="simple-input-group">
+      <div class="input-grid">
+        <div class="field">
+          <label for="pension-base-annual">65歳時点の想定年金額（年額・円）</label>
+          <input type="number" id="pension-base-annual" min="0" step="10000" value="1800000">
+          <div class="hint">「ねんきん定期便」の老齢年金の見込額（年額）を入力してください。実際の振込は年6回・偶数月に2か月分ずつです。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 働き方から概算する：加入年数・平均年収から年金額を概算 -->
+    <div id="detail-input-group" style="display:none;">
+      <div class="hint" style="margin-bottom:12px;">平均年収や加入年数から、老齢厚生年金を簡易的に推計します。実際の年金額は、ねんきん定期便やねんきんネットでご確認ください。</div>
+      <div class="input-grid">
+        <div class="field">
+          <label for="dtl-kousei-years">厚生年金 加入年数（会社員・公務員期間／年）</label>
+          <input type="number" id="dtl-kousei-years" min="0" max="55" step="1" value="30">
+        </div>
+        <div class="field">
+          <label for="dtl-avg-income">厚生年金加入期間の平均年収（円）</label>
+          <input type="number" id="dtl-avg-income" min="0" step="10000" value="5000000">
+          <div class="hint">賞与込みのおおよその平均年収で構いません</div>
+        </div>
+        <div class="field">
+          <label for="dtl-kokumin-years">国民年金のみの加入年数（自営業・学生・専業主婦(夫)期間等／年）</label>
+          <input type="number" id="dtl-kokumin-years" min="0" max="40" step="1" value="10">
+          <div class="hint">厚生年金加入期間は自動的に国民年金にも算入されるため、それ以外の期間のみ入力してください</div>
+        </div>
+      </div>
+      <div class="estimate-result-box">
+        <div class="estimate-title">🧮 働き方からの概算結果（65歳受取時点・年額の目安）</div>
+        <div class="estimate-rows">
+          <div class="estimate-item"><div class="k">老齢基礎年金（年額）</div><div class="v" id="estimate-kiso">-</div></div>
+          <div class="estimate-item"><div class="k">老齢厚生年金（年額）</div><div class="v" id="estimate-kousei">-</div></div>
+        </div>
+        <div class="estimate-total">概算 年金合計（年額）：<strong id="estimate-total">-</strong></div>
+        <div class="estimate-note">※ 平均標準報酬月額×5.481/1000×加入月数、および納付月数に応じた満額按分による、とても簡易な概算です。免除期間・未納期間・配偶者の扶養状況等は考慮していません。正確な見込額は「ねんきん定期便」「ねんきんネット」でご確認ください。この概算値がそのまま①の計算に使われる参考結果です。</div>
+      </div>
+    </div>
+
+    <div class="input-grid" style="margin-top:16px;">
+      <div class="field">
+        <label>生年月日ルール（繰上げ減額率）</label>
+        <div class="radio-group" id="early-rate-group">
+          <label class="radio-chip checked">
+            <input type="radio" name="early-rate" value="0.004" checked> 昭和37年4月2日以降（0.4%/月）
+          </label>
+          <label class="radio-chip">
+            <input type="radio" name="early-rate" value="0.005"> 昭和37年4月1日以前（0.5%/月）
+          </label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>重視する寿命の目安（表・グラフの強調に使用）</label>
+        <div class="radio-group" id="life-age-group">
+          <label class="radio-chip"><input type="radio" name="life-age" value="80"> 80歳</label>
+          <label class="radio-chip checked"><input type="radio" name="life-age" value="90" checked> 90歳</label>
+          <label class="radio-chip"><input type="radio" name="life-age" value="100"> 100歳</label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>税・社会保険の概算モード</label>
+        <div class="toggle-row">
+          <span style="font-size:.82rem;color:var(--muted);">単身・年金収入のみの標準モデルで概算</span>
+          <span class="switch">
+            <input type="checkbox" id="tax-toggle" checked>
+            <span class="slider-track"></span>
+          </span>
+        </div>
+        <div class="hint">OFFにすると税・社保を引く前の金額のみで比較します</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 表 -->
+  <h2 class="section-title">② 受取開始年齢別 一覧表<span class="pill">行をクリックで選択</span></h2>
+  <div class="table-wrap">
+    <table id="public-table">
+      <thead>
+        <tr>
+          <th>開始年齢</th>
+          <th>年額（税引前）</th>
+          <th>月額換算（参考）</th>
+          <th>概算手取り年額</th>
+          <th>80歳までの累計</th>
+          <th>90歳までの累計</th>
+          <th>100歳までの累計</th>
+        </tr>
+      </thead>
+      <tbody id="public-table-body"></tbody>
+    </table>
+  </div>
+  <div class="note-block">
+    ※ 公的年金の実際の振込は「年6回・偶数月に前2か月分をまとめて」支給されるため、本アプリでは<strong>年額を基準</strong>に計算しています（表の「月額換算」は年額÷12の参考値です）。
+  </div>
+
+  <!-- サマリーカード -->
+  <h2 class="section-title">③ 65歳受給との比較</h2>
+  <div class="summary-grid" id="public-summary-grid"></div>
+
+  <!-- グラフ -->
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h3>📈 累計受取額の推移：65歳受給 vs 選択中の年齢（損益分岐点の確認）</h3>
+      <div class="chart-box"><canvas id="chart-annual"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>📊 受取開始年齢別：80/90/100歳時点の累計受取額比較</h3>
+      <div class="chart-box"><canvas id="chart-cumulative"></canvas></div>
+    </div>
+  </div>
+
+  <!-- コメント -->
+  <div class="comment-box" id="public-comment-box">
+    <h3>💬 このシミュレーションからの示唆（自動生成・断定ではありません）</h3>
+    <ul id="public-comment-list"></ul>
+  </div>
+
+  <div class="note-block">
+    ※ 税額は所得税・住民税の簡易テーブルによる概算、社会保険料は「単身・年金収入のみ」を前提とした標準モデルによる概算です。実際の自治体・世帯構成・控除状況により金額は変動します。累計受取額・損益分岐点は税引前の年額を基に、受取開始年齢から寿命までの年数を単純に掛けた概算です。実際の寿命は予測できないため、あくまで目安としてご覧ください。
+  </div>
+</section>
+
+<!-- =========================================================
+     タブB：DC / iDeCo
+========================================================= -->
+<section class="tab-panel" id="tab-dc" role="tabpanel" aria-labelledby="tab-btn-dc" hidden>
+
+  <h2 class="section-title">① 前提条件を入力</h2>
+  <div class="panel">
+    <div class="input-grid">
+      <div class="field">
+        <label for="dc-balance">DC残高（iDeCo・企業型DC合計／円）</label>
+        <input type="number" id="dc-balance" min="0" step="10000" value="5000000">
+      </div>
+
+      <div class="field">
+        <label>受取方法（比較の主役をハイライトします）</label>
+        <div class="radio-group" id="dc-method-group">
+          <label class="radio-chip"><input type="radio" name="dc-method" value="lump"> 一時金</label>
+          <label class="radio-chip"><input type="radio" name="dc-method" value="pension"> 年金</label>
+          <label class="radio-chip checked"><input type="radio" name="dc-method" value="both" checked> 併用（比較用：50％ずつ）</label>
+        </div>
+        <div class="hint">本試算では、比較のため一時金50％・年金50％として計算します。実際の併用割合や受取可否は、利用している運営管理機関によって異なります。</div>
+      </div>
+
+      <div class="field">
+        <label for="dc-service-years">勤続年数（退職所得控除の計算に使用／年）</label>
+        <input type="number" id="dc-service-years" min="1" max="60" step="1" value="20">
+        <div class="hint">会社の退職金とDC一時金の勤続期間が重複する場合、原則として長い方の年数を入力してください</div>
+      </div>
+
+      <div class="field">
+        <label for="dc-company-severance">会社からの退職金（円）</label>
+        <input type="number" id="dc-company-severance" min="0" step="10000" value="0">
+        <div class="hint">退職所得控除の枠はDC一時金と通算されるため、正確な税額計算にはこちらの入力が必要です</div>
+      </div>
+
+      <div class="field">
+        <label for="dc-other-retirement">その他の退職所得（円）</label>
+        <input type="number" id="dc-other-retirement" min="0" step="10000" value="0">
+        <div class="hint">前職の退職金など、同一年に受け取る他の退職所得があれば入力してください（無ければ0のままでOK）</div>
+      </div>
+
+      <div class="field">
+        <label for="dc-payout-years">年金受取年数</label>
+        <select id="dc-payout-years">
+          <option value="5">5年</option>
+          <option value="10" selected>10年</option>
+          <option value="15">15年</option>
+          <option value="20">20年</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="dc-annual-pension">年金として受け取る場合の年間受取額（円）</label>
+        <input type="number" id="dc-annual-pension" min="0" step="1000" value="500000">
+        <div class="hint" id="dc-annual-pension-hint">自動計算：DC残高 ÷ 受取年数（手入力で上書き可）</div>
+      </div>
+
+      <div class="field">
+        <label for="dc-public-pension">既存の公的年金年額（円）</label>
+        <input type="number" id="dc-public-pension" min="0" step="10000" value="1800000">
+        <div class="hint">公的年金等控除の合算判定に使用します</div>
+      </div>
+    </div>
+    <div class="note-block" style="margin-top:16px;">
+      ※一時金・年金・併用の可否、受取期間、選択できる割合は、運営管理機関や制度によって異なります。実際の受取条件は、加入先へご確認ください。
+    </div>
+  </div>
+
+  <h2 class="section-title">② 受取方法ごとの比較カード</h2>
+  <div class="dc-card-grid" id="dc-card-grid"></div>
+
+  <div class="note-block">
+    ※本試算は、会社退職金とDC一時金を同一年に受け取るケースを中心とした簡易計算です。受取年が異なる場合、過去に退職金を受け取っている場合、勤続期間・加入期間が重複する場合は、退職所得控除の計算が異なることがあります。あくまで概算の参考結果としてご覧ください。
+  </div>
+
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h3>📊 受取方法別：手取り総額の目安</h3>
+      <div class="chart-box"><canvas id="chart-dc-compare"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>💡 比較のポイント</h3>
+      <div id="dc-label-summary" style="font-size:.88rem;padding:6px 4px;"></div>
+    </div>
+  </div>
+
+  <h2 class="section-title">③ 比較表</h2>
+  <div class="table-wrap">
+    <table id="dc-table">
+      <thead>
+        <tr>
+          <th>受取方法</th>
+          <th>税引前受取額</th>
+          <th>概算課税所得</th>
+          <th>概算税額</th>
+          <th>概算手取り</th>
+          <th>ひとことメモ</th>
+        </tr>
+      </thead>
+      <tbody id="dc-table-body"></tbody>
+    </table>
+  </div>
+
+  <div class="note-block">
+    ※ 一時金は退職所得（分離課税・1/2課税）、年金は公的年金等の雑所得として簡易試算しています。併用（比較用：50％ずつ）はDC残高を50:50で分割した場合の概算例です。税額・社会保険料は所得税・住民税の簡易テーブルによる参考結果であり、実際の申告額とは異なります。<strong>退職所得控除は同一年に受け取る退職金等を合算して1回だけ適用されるため</strong>、「会社からの退職金」「その他退職所得」を入力いただいた場合は、それらと合算した金額に控除枠を適用したうえで、DC一時金に対応する税額を差分（限界負担）方式で概算しています。年金部分の税額は「公的年金のみの場合」との差分（限界負担）による試算です。
+  </div>
+</section>
+
+</main>
+
+<footer>年金受取シミュレーター（概算版）｜本ツールは相談時の比較検討を目的とした参考情報であり、税務・年金の個別助言ではありません。</footer>
+<div id="error-banner"></div>
+
+<!-- =========================================================
+     Script 1: 共通ユーティリティ・定数
+========================================================= -->
+<script>
+window.Utils = (function(){
+  'use strict';
+
+  // 円表記（3桁区切り）
+  function yen(v){
+    if(!isFinite(v)) v = 0;
+    return Math.round(v).toLocaleString('ja-JP') + '円';
+  }
+  // 万円表記
+  function man(v){
+    if(!isFinite(v)) v = 0;
+    return (v/10000).toLocaleString('ja-JP',{maximumFractionDigits:1}) + '万円';
+  }
+  // 円と万円を併記
+  function yenMan(v){
+    return yen(v) + '（約' + man(v) + '）';
+  }
+  function clampNumber(v, min, max, fallback){
+    var n = Number(v);
+    if(!isFinite(n)) return fallback;
+    if(min !== undefined && n < min) n = min;
+    if(max !== undefined && n > max) n = max;
+    return n;
+  }
+  function getRadioValue(name){
+    var els = document.getElementsByName(name);
+    for(var i=0;i<els.length;i++){ if(els[i].checked) return els[i].value; }
+    return null;
+  }
+  function showError(msg){
+    try{
+      var el = document.getElementById('error-banner');
+      if(!el) return;
+      el.textContent = '⚠ ' + msg;
+      el.style.display = 'block';
+      clearTimeout(window.__errTimer);
+      window.__errTimer = setTimeout(function(){ el.style.display='none'; }, 4000);
+    }catch(e){ console.error(e); }
+  }
+
+  return { yen:yen, man:man, yenMan:yenMan, clampNumber:clampNumber, getRadioValue:getRadioValue, showError:showError };
+})();
+</script>
+
+<!-- =========================================================
+     Script 2: 税・社会保険 計算モジュール
+========================================================= -->
+<script>
+window.TaxCalc = (function(){
+  'use strict';
+
+  // 所得税の簡易累進テーブル（速算控除方式）
+  var IT_BRACKETS = [
+    {max:1950000,  rate:0.05, deduct:0},
+    {max:3300000,  rate:0.10, deduct:97500},
+    {max:6950000,  rate:0.20, deduct:427500},
+    {max:9000000,  rate:0.23, deduct:636000},
+    {max:18000000, rate:0.33, deduct:1536000},
+    {max:40000000, rate:0.40, deduct:2796000},
+    {max:Infinity, rate:0.45, deduct:4796000}
+  ];
+  var BASIC_DEDUCTION_INCOME_TAX = 480000;   // 所得税 基礎控除（簡易）
+  var BASIC_DEDUCTION_RESIDENT_TAX = 430000; // 住民税 基礎控除（簡易）
+  var RESIDENT_TAX_RATE = 0.10;              // 住民税 所得割 概算率
+  var RESIDENT_TAX_PER_CAPITA = 5000;        // 住民税 均等割 概算（年）
+
+  // 所得税額（速算表）
+  function incomeTaxAmount(taxableIncome){
+    var t = Math.max(0, taxableIncome);
+    for(var i=0;i<IT_BRACKETS.length;i++){
+      if(t <= IT_BRACKETS[i].max){
+        return Math.max(0, t*IT_BRACKETS[i].rate - IT_BRACKETS[i].deduct);
+      }
+    }
+    return 0;
+  }
+  // 住民税額（概算：所得割10%＋均等割）
+  function residentTaxAmount(taxableIncomeBase){
+    var t = Math.max(0, taxableIncomeBase);
+    if(t <= 0) return 0;
+    return Math.round(t*RESIDENT_TAX_RATE) + RESIDENT_TAX_PER_CAPITA;
+  }
+  // 公的年金等控除後の雑所得（簡易表）
+  function zatsuFromPension(income, is65orMore){
+    var i = Math.max(0, income);
+    if(is65orMore){
+      if(i < 1100000) return 0;
+      if(i < 3300000) return i - 1100000;
+      if(i < 4100000) return i*0.75 - 275000;
+      if(i < 7700000) return i*0.85 - 685000;
+      if(i < 10000000) return i*0.95 - 1455000;
+      return i - 1955000;
+    }else{
+      if(i < 600000) return 0;
+      if(i < 1300000) return i - 600000;
+      if(i < 4100000) return i*0.75 - 275000;
+      if(i < 7700000) return i*0.85 - 685000;
+      if(i < 10000000) return i*0.95 - 1455000;
+      return i - 1955000;
+    }
+  }
+  // 雑所得に対する所得税・住民税の合計（基礎控除考慮）
+  function taxOnZatsu(zatsu){
+    var zz = Math.max(0, zatsu);
+    var itBase = Math.max(0, zz - BASIC_DEDUCTION_INCOME_TAX);
+    var rtBase = Math.max(0, zz - BASIC_DEDUCTION_RESIDENT_TAX);
+    var it = incomeTaxAmount(itBase);
+    var rt = residentTaxAmount(rtBase);
+    return { incomeTax:it, residentTax:rt, total: it+rt };
+  }
+  // 退職所得控除額
+  function retirementDeduction(years){
+    var y = Math.max(1, Math.round(years));
+    if(y <= 20) return Math.max(400000*y, 800000);
+    return 8000000 + 700000*(y-20);
+  }
+  // 退職所得の税額（分離課税・1/2課税）
+  function retirementTax(lumpSum, years){
+    var ded = retirementDeduction(years);
+    var afterDeduction = Math.max(0, lumpSum - ded);
+    var taxable = afterDeduction / 2;
+    var it = incomeTaxAmount(Math.max(0, taxable));
+    var rt = residentTaxAmount(Math.max(0, taxable));
+    return { deduction:ded, afterDeduction:afterDeduction, taxable:taxable, incomeTax:it, residentTax:rt, total: it+rt };
+  }
+  // 社会保険料の概算（標準モデル：単身・年金収入のみ）
+  function estimateInsurance(annualIncome, age){
+    var i = Math.max(0, annualIncome);
+    if(age < 65){
+      // 65歳未満は簡易表示のみ（在職中の可能性も高いため概算に留める）
+      return Math.round(i * 0.05);
+    }else if(age < 75){
+      // 国民健康保険＋介護保険 概算（標準モデル係数）
+      var kokuho = Math.min(Math.round(i*0.09), 900000);
+      return kokuho;
+    }else{
+      // 後期高齢者医療＋介護保険 概算（標準モデル係数）
+      var kouki = Math.min(Math.round(i*0.08), 700000);
+      var kaigo = Math.min(Math.round(i*0.02), 170000);
+      return kouki + kaigo;
+    }
+  }
+
+  return {
+    incomeTaxAmount:incomeTaxAmount,
+    residentTaxAmount:residentTaxAmount,
+    zatsuFromPension:zatsuFromPension,
+    taxOnZatsu:taxOnZatsu,
+    retirementDeduction:retirementDeduction,
+    retirementTax:retirementTax,
+    estimateInsurance:estimateInsurance
+  };
+})();
+</script>
+
+<!-- =========================================================
+     Script 2.5: 公的年金額 推計モジュール（働き方からの概算）
+     ※ 非常に簡易なモデルです。実額は「ねんきんネット」等でご確認ください。
+========================================================= -->
+<script>
+window.PensionEstimate = (function(){
+  'use strict';
+
+  var KISO_FULL_ANNUAL = 816000;      // 老齢基礎年金の満額（年額・概算／令和6年度水準）
+  var MAX_PAID_MONTHS = 480;          // 保険料納付済月数の上限（40年）
+  var KOUSEI_RATE = 5.481/1000;       // 報酬比例部分の乗率（平成15年4月以後・簡易採用）
+
+  // 老齢基礎年金（国民年金）の推計：納付済月数に応じた満額按分
+  function estimateKiso(kouseiYears, kokuminYears){
+    var paidMonths = Math.max(0, kouseiYears)*12 + Math.max(0, kokuminYears)*12;
+    paidMonths = Math.min(paidMonths, MAX_PAID_MONTHS);
+    return KISO_FULL_ANNUAL * (paidMonths / MAX_PAID_MONTHS);
+  }
+
+  // 老齢厚生年金（報酬比例部分）の推計：平均年収ベース
+  function estimateKousei(kouseiYears, avgAnnualIncome){
+    var months = Math.max(0, kouseiYears)*12;
+    var avgStandardMonthly = Math.max(0, avgAnnualIncome) / 12; // 賞与込み年収を月額換算（簡易）
+    return avgStandardMonthly * KOUSEI_RATE * months;
+  }
+
+  // 合計（65歳受取時点の年額目安）
+  function estimateTotal(kouseiYears, avgAnnualIncome, kokuminYears){
+    var kiso = estimateKiso(kouseiYears, kokuminYears);
+    var kousei = estimateKousei(kouseiYears, avgAnnualIncome);
+    return { kiso:kiso, kousei:kousei, total: kiso+kousei };
+  }
+
+  return { estimateKiso:estimateKiso, estimateKousei:estimateKousei, estimateTotal:estimateTotal };
+})();
+</script>
+
+<!-- =========================================================
+     Script 3: 公的年金 計算モジュール
+========================================================= -->
+<script>
+window.PensionCalc = (function(){
+  'use strict';
+
+  // 受取開始年齢ごとの年額を計算（公的年金は年6回・偶数月支給の実態に合わせ、年額を基準に算出）
+  function annualAmount(age, baseAnnual, earlyRate){
+    var a;
+    if(age < 65){
+      var earlyMonths = (65-age)*12;
+      a = baseAnnual * (1 - earlyRate*earlyMonths);
+    }else if(age === 65){
+      a = baseAnnual;
+    }else{
+      var deferredMonths = (age-65)*12;
+      a = baseAnnual * (1 + 0.007*deferredMonths);
+    }
+    return Math.max(0, a);
+  }
+
+  // 1行分のデータ（税・社保考慮あり/なし）
+  function calcRow(age, baseAnnual, earlyRate, applyTax){
+    var annual = annualAmount(age, baseAnnual, earlyRate);
+    var monthly = annual/12; // 参考表示用（実際は年6回・2か月分ずつの振込）
+    var is65orMore = age >= 65;
+    var netAnnual = annual;
+    var detail = null;
+    if(applyTax){
+      var zatsu = TaxCalc.zatsuFromPension(annual, is65orMore);
+      var tax = TaxCalc.taxOnZatsu(zatsu);
+      var insurance = TaxCalc.estimateInsurance(annual, age);
+      netAnnual = Math.max(0, annual - tax.total - insurance);
+      detail = { zatsu:zatsu, incomeTax:tax.incomeTax, residentTax:tax.residentTax, insurance:insurance };
+    }
+    var cum80 = annual * Math.max(0, 80-age);
+    var cum90 = annual * Math.max(0, 90-age);
+    var cum100 = annual * Math.max(0, 100-age);
+    return {
+      age:age, monthly:monthly, annual:annual, netAnnual:netAnnual,
+      cum80:cum80, cum90:cum90, cum100:cum100, detail:detail
+    };
+  }
+
+  // 60〜75歳までの一覧を生成
+  function buildTable(baseAnnual, earlyRate, applyTax){
+    var rows = [];
+    for(var age=60; age<=75; age++){
+      rows.push(calcRow(age, baseAnnual, earlyRate, applyTax));
+    }
+    return rows;
+  }
+
+  // 到達年齢ごとの累計受取額シリーズ（グラフ用）：ある年齢で受取を始めた場合、
+  // fromAge〜toAgeの各到達年齢時点でいくら累計で受け取っているか
+  function cumulativeSeries(startAge, baseAnnual, earlyRate, fromAge, toAge){
+    var annual = annualAmount(startAge, baseAnnual, earlyRate);
+    var arr = [];
+    for(var age=fromAge; age<=toAge; age++){
+      arr.push({ age:age, cum: annual * Math.max(0, age-startAge) });
+    }
+    return arr;
+  }
+
+  // 損益分岐点年齢を探索：65歳受給(ageA)と選択年齢受給(ageB)の累計額が入れ替わる到達年齢
+  // 戻り値：入れ替わる到達年齢（整数・年単位の概算）。差が生じない/入れ替わらない場合はnull
+  function findBreakEvenAge(baseAnnual, earlyRate, ageA, ageB){
+    if(ageA === ageB) return null;
+    var annualA = annualAmount(ageA, baseAnnual, earlyRate);
+    var annualB = annualAmount(ageB, baseAnnual, earlyRate);
+    if(annualA === annualB) return null; // 年額が同じなら交わらない
+
+    var start = Math.max(ageA, ageB);
+    var prevDiff = null;
+    for(var age=start; age<=110; age++){
+      var cumA = annualA*Math.max(0, age-ageA);
+      var cumB = annualB*Math.max(0, age-ageB);
+      var diff = cumB - cumA; // 正：選択年齢の方が多い／負：65歳受給の方が多い
+      if(prevDiff !== null){
+        if((prevDiff>0 && diff<=0) || (prevDiff<0 && diff>=0)){
+          return age;
+        }
+      }
+      prevDiff = diff;
+    }
+    return null; // 110歳まで入れ替わらない
+  }
+
+  return {
+    annualAmount:annualAmount, calcRow:calcRow, buildTable:buildTable,
+    cumulativeSeries:cumulativeSeries, findBreakEvenAge:findBreakEvenAge
+  };
+})();
+</script>
+
+<!-- =========================================================
+     Script 4: DC / iDeCo 計算モジュール
+========================================================= -->
+<script>
+window.DCCalc = (function(){
+  'use strict';
+
+  // 一時金受取の試算
+  // 退職所得控除は「同一年に受け取る退職金等」を合算して1回だけ適用されるため、
+  // 会社からの退職金・その他退職所得と合算した上で控除枠を計算し、
+  // DC一時金に対応する税額を差分（限界負担）方式で切り出す
+  function calcLump(dcAmount, otherRetirement, serviceYears){
+    var dc = Math.max(0, dcAmount);
+    var other = Math.max(0, otherRetirement || 0);
+    var combinedAmount = dc + other;
+
+    var rCombined = TaxCalc.retirementTax(combinedAmount, serviceYears);
+    var rOtherOnly = TaxCalc.retirementTax(other, serviceYears);
+
+    var marginalTaxableIncome = Math.max(0, rCombined.taxable - rOtherOnly.taxable);
+    var marginalTax = Math.max(0, Math.min(rCombined.total - rOtherOnly.total, dc)); // 税額がDC受取額を超えないようガード
+    var net = Math.max(0, dc - marginalTax);
+
+    return {
+      grossAmount: dc,
+      otherRetirement: other,
+      combinedAmount: combinedAmount,
+      deduction: rCombined.deduction,
+      afterDeduction: rCombined.afterDeduction,
+      taxableIncome: marginalTaxableIncome, // DC一時金分に対応する概算課税所得（合算後の増分）
+      combinedTaxableIncome: rCombined.taxable,
+      tax: marginalTax,
+      net: net
+    };
+  }
+
+  // 年金受取の試算（公的年金との合算・限界負担方式）
+  function calcPension(dcAnnual, publicAnnual){
+    var combined = dcAnnual + publicAnnual;
+    var is65 = true; // DC年金受取は65歳前後を想定した簡易モデル
+    var zatsuCombined = TaxCalc.zatsuFromPension(combined, is65);
+    var zatsuPublicOnly = TaxCalc.zatsuFromPension(publicAnnual, is65);
+    var taxCombined = TaxCalc.taxOnZatsu(zatsuCombined).total;
+    var taxPublicOnly = TaxCalc.taxOnZatsu(zatsuPublicOnly).total;
+    var marginalTax = Math.max(0, Math.min(taxCombined - taxPublicOnly, dcAnnual)); // 税額がDC受取額を超えないようガード
+    var net = Math.max(0, dcAnnual - marginalTax);
+    return {
+      grossAmount: dcAnnual,
+      combinedAnnual: combined,
+      taxableIncome: Math.max(0, zatsuCombined - zatsuPublicOnly), // DC分の増分課税所得の目安
+      zatsuCombined: zatsuCombined,
+      tax: marginalTax,
+      net: net
+    };
+  }
+
+  return { calcLump:calcLump, calcPension:calcPension };
+})();
+</script>
+
+<!-- =========================================================
+     Script 5: 描画（表・グラフ・カード・コメント）
+========================================================= -->
+<script>
+window.Render = (function(){
+  'use strict';
+
+  var charts = {};
+
+  // ---------- 公的年金タブ ----------
+  function renderPublicTab(state){
+    var rows = PensionCalc.buildTable(state.baseAnnual, state.earlyRate, state.applyTax);
+    state.publicRows = rows;
+
+    renderPublicSummary(rows, state);
+    renderPublicTable(rows, state);
+    renderPublicCharts(rows, state);
+    renderPublicComments(rows, state);
+  }
+
+  // サマリーは「65歳受給」を基準点とし、選択中の年齢がどう違うのかを見せる
+  function renderPublicSummary(rows, state){
+    var grid = document.getElementById('public-summary-grid');
+    var base65 = rows.find(function(r){return r.age===65;});
+    var sel = rows.find(function(r){return r.age===state.selectedAge;}) || base65;
+    var lifeKey = 'cum'+state.lifeAge;
+
+    // ①選択年齢の年額は65歳と比べてどう違うか
+    var annualDiff = sel.annual - base65.annual;
+    var annualDiffLabel = annualDiff===0 ? '65歳と同額' : (annualDiff>0 ? '+'+Utils.man(annualDiff)+'/年' : '−'+Utils.man(Math.abs(annualDiff))+'/年');
+
+    // ②選択した寿命時点での累計差
+    var cumDiff = sel[lifeKey] - base65[lifeKey];
+    var cumDiffLabel = cumDiff===0 ? '65歳受給と同額' : (cumDiff>0 ? '+'+Utils.man(cumDiff) : '−'+Utils.man(Math.abs(cumDiff)));
+
+    // ③損益分岐点（何歳まで生きると65歳受給より得になるか／損になるか）
+    var breakEven = PensionCalc.findBreakEvenAge(state.baseAnnual, state.earlyRate, 65, state.selectedAge);
+    var breakEvenLabel, breakEvenSub;
+    if(state.selectedAge === 65){
+      breakEvenLabel = '基準（65歳）';
+      breakEvenSub = 'これが比較のベースラインです';
+    }else if(breakEven === null){
+      breakEvenLabel = '常に同額の傾向';
+      breakEvenSub = '年額の差がほぼ無いため、寿命による損益の差はあまり生じません';
+    }else if(state.selectedAge < 65){
+      breakEvenLabel = breakEven+'歳';
+      breakEvenSub = breakEven+'歳より長生きすると、65歳受給の方が累計で多くなる可能性があります';
+    }else{
+      breakEvenLabel = breakEven+'歳';
+      breakEvenSub = breakEven+'歳より長生きすると、'+state.selectedAge+'歳受給の方が累計で多くなる可能性があります';
+    }
+
+    grid.innerHTML =
+      summaryCardHTML('選択中：'+state.selectedAge+'歳受給の年額は65歳と比べて', annualDiffLabel, '65歳受給の年額：'+Utils.yenMan(base65.annual)) +
+      summaryCardHTML(state.lifeAge+'歳まで生きた場合の累計差（vs 65歳）', cumDiffLabel, '概算・税引前ベース') +
+      summaryCardHTML('損益が入れ替わる年齢（損益分岐点）', breakEvenLabel, breakEvenSub);
+  }
+
+  function summaryCardHTML(label, value, sub){
+    return '<div class="summary-card">' +
+      '<div class="label">'+label+'</div>' +
+      '<div class="value">'+value+'</div>' +
+      '<div class="sub">'+sub+'</div>' +
+    '</div>';
+  }
+
+  function renderPublicTable(rows, state){
+    var tbody = document.getElementById('public-table-body');
+    var lifeAge = state.lifeAge;
+    var html = '';
+    rows.forEach(function(r){
+      var selected = (r.age === state.selectedAge) ? ' selected-row' : '';
+      var hi80 = lifeAge===80 ? ' col-highlight' : '';
+      var hi90 = lifeAge===90 ? ' col-highlight' : '';
+      var hi100 = lifeAge===100 ? ' col-highlight' : '';
+      html += '<tr class="'+selected.trim()+'" data-age="'+r.age+'" onclick="App.selectPublicAge('+r.age+')">' +
+        '<td data-label="開始年齢">'+r.age+'歳</td>' +
+        '<td data-label="年額（税引前）">'+Utils.yen(r.annual)+'</td>' +
+        '<td data-label="月額換算（参考）">'+Utils.yen(r.monthly)+'</td>' +
+        '<td data-label="概算手取り年額">'+Utils.yen(r.netAnnual)+'</td>' +
+        '<td data-label="80歳までの累計" class="'+hi80.trim()+'">'+Utils.man(r.cum80)+'</td>' +
+        '<td data-label="90歳までの累計" class="'+hi90.trim()+'">'+Utils.man(r.cum90)+'</td>' +
+        '<td data-label="100歳までの累計" class="'+hi100.trim()+'">'+Utils.man(r.cum100)+'</td>' +
+      '</tr>';
+    });
+    tbody.innerHTML = html;
+  }
+
+  function renderPublicCharts(rows, state){
+    var ages = rows.map(function(r){return r.age+'歳';});
+
+    // 折れ線グラフ：65歳受給 vs 選択中の年齢受給の「到達年齢別・累計受取額」推移
+    // → 2本の線が交わる地点＝損益分岐点、というのが直感的に見えるようにする
+    var fromAge = Math.min(65, state.selectedAge);
+    var toAge = 100;
+    var seriesBase = PensionCalc.cumulativeSeries(65, state.baseAnnual, state.earlyRate, fromAge, toAge);
+    var seriesSel = PensionCalc.cumulativeSeries(state.selectedAge, state.baseAnnual, state.earlyRate, fromAge, toAge);
+    var reachLabels = seriesBase.map(function(p){return p.age+'歳';});
+
+    var ctx1 = document.getElementById('chart-annual').getContext('2d');
+    if(charts.annual) charts.annual.destroy();
+    charts.annual = new Chart(ctx1, {
+      type:'line',
+      data:{
+        labels: reachLabels,
+        datasets:[
+          { label:'65歳受給（累計）', data: seriesBase.map(function(p){return Math.round(p.cum);}),
+            borderColor:'#5499f5', backgroundColor:'rgba(84,153,245,.12)', tension:.15, fill:false, pointRadius:2 },
+          { label:state.selectedAge+'歳受給（累計）', data: seriesSel.map(function(p){return Math.round(p.cum);}),
+            borderColor:'#002f6c', backgroundColor:'rgba(0,47,108,.12)', tension:.15, fill:false, pointRadius:2 }
+        ]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        interaction:{mode:'index', intersect:false},
+        plugins:{
+          legend:{position:'bottom'},
+          tooltip:{ callbacks:{ label:function(c){ return c.dataset.label+': '+Utils.yen(c.raw); } } }
+        },
+        scales:{
+          x:{ title:{ display:true, text:'到達年齢（何歳まで生きたか）', font:{size:11} } },
+          y:{ ticks:{ callback:function(v){ return Utils.man(v); } } }
+        }
+      }
+    });
+
+    // 棒グラフ：寿命別 累計比較
+    var ctx2 = document.getElementById('chart-cumulative').getContext('2d');
+    if(charts.cumulative) charts.cumulative.destroy();
+    charts.cumulative = new Chart(ctx2, {
+      type:'bar',
+      data:{
+        labels: ages,
+        datasets:[
+          { label:'80歳まで累計', data: rows.map(function(r){return Math.round(r.cum80);}), backgroundColor:'#a9c8f0' },
+          { label:'90歳まで累計', data: rows.map(function(r){return Math.round(r.cum90);}), backgroundColor:'#5499f5' },
+          { label:'100歳まで累計', data: rows.map(function(r){return Math.round(r.cum100);}), backgroundColor:'#002f6c' }
+        ]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{position:'bottom'}, tooltip:{ callbacks:{ label:function(c){ return c.dataset.label+': '+Utils.yen(c.raw); } } } },
+        scales:{ y:{ ticks:{ callback:function(v){ return Utils.man(v); } } } }
+      }
+    });
+  }
+
+  function renderPublicComments(rows, state){
+    var list = document.getElementById('public-comment-list');
+    var selRow = rows.find(function(r){return r.age===state.selectedAge;}) || rows[5];
+    var base65 = rows.find(function(r){return r.age===65;});
+    var lifeKey = 'cum'+state.lifeAge;
+    var diff = selRow[lifeKey] - base65[lifeKey];
+    var diffAbs = Utils.man(Math.abs(diff));
+
+    var items = [];
+
+    if(state.selectedAge <= 63){
+      items.push({tag:'早く受け取る安心', text:'受取開始を'+state.selectedAge+'歳に早めると、60代前半から生活費の柱を確保しやすくなります。ただし年額（月額換算）は65歳受取より少なくなる点は押さえておきたいところです。'});
+    }else if(state.selectedAge >= 70){
+      items.push({tag:'年額を厚くする安心', text:'受取開始を'+state.selectedAge+'歳まで遅らせると、年額そのものが厚くなり、長期的な生活費の余裕につながる可能性があります。'});
+    }else{
+      items.push({tag:'バランス型', text:state.selectedAge+'歳受取は、早期受取と繰下げ増額のちょうど中間的な選択肢といえそうです。'});
+    }
+
+    if(diff > 0){
+      items.push({tag:'長生き前提なら有利', text: state.lifeAge+'歳まで生きる前提では、'+state.selectedAge+'歳開始の方が65歳開始より累計で約'+diffAbs+'多くなる可能性があります（概算・税引前ベース）。'});
+    }else if(diff < 0){
+      items.push({tag:'長生き前提では逆の傾向', text: state.lifeAge+'歳まで生きる前提では、65歳開始の方が'+state.selectedAge+'歳開始より累計で約'+diffAbs+'多くなる可能性があります（概算・税引前ベース）。'});
+    }else{
+      items.push({tag:'差は僅か', text: state.lifeAge+'歳時点の累計は65歳開始とほぼ同水準になる見込みです。'});
+    }
+
+    var breakEven = PensionCalc.findBreakEvenAge(state.baseAnnual, state.earlyRate, 65, state.selectedAge);
+    if(state.selectedAge !== 65 && breakEven !== null){
+      items.push({tag:'損益分岐点の目安', text: breakEven+'歳が、65歳開始と'+state.selectedAge+'歳開始の累計額が入れ替わる目安の年齢です。ここより長生きするかどうかが判断の分かれ目になりそうです。'});
+    }
+
+    items.push({tag:'ご参考', text:'どちらが「正解」というより、ご本人・ご家族の資金の使い方や健康状態への安心感によって、向いている選択肢は変わってくるものだと思います。'});
+
+    list.innerHTML = items.map(function(it){
+      return '<li><span class="tag">'+it.tag+'</span>'+it.text+'</li>';
+    }).join('');
+  }
+
+  // ---------- DCタブ ----------
+  function renderDCTab(state){
+    var balance = state.dcBalance;
+    var half = balance/2;
+    var otherRetirement = state.dcCompanySeverance + state.dcOtherRetirement;
+
+    var lumpFull = DCCalc.calcLump(balance, otherRetirement, state.dcServiceYears);
+    var pensionFull = DCCalc.calcPension(state.dcAnnualPension, state.dcPublicPension);
+
+    var lumpHalf = DCCalc.calcLump(half, otherRetirement, state.dcServiceYears);
+    var dcAnnualHalf = half / state.dcPayoutYears;
+    var pensionHalf = DCCalc.calcPension(dcAnnualHalf, state.dcPublicPension);
+
+    var both = {
+      lump: lumpHalf,
+      pension: pensionHalf,
+      totalNetFirstYear: lumpHalf.net + pensionHalf.net
+    };
+
+    state.dcResult = { lumpFull:lumpFull, pensionFull:pensionFull, both:both, dcAnnualHalf:dcAnnualHalf };
+
+    renderDCCards(state);
+    renderDCChart(state);
+    renderDCTable(state);
+    renderDCLabelSummary(state);
+  }
+
+  function dcRowHTML(k,v,total){
+    return '<div class="dc-row'+(total?' total':'')+'"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>';
+  }
+
+  function renderDCCards(state){
+    var r = state.dcResult;
+    var method = state.dcMethod;
+    var grid = document.getElementById('dc-card-grid');
+
+    var otherRetireHTML = r.lumpFull.otherRetirement > 0
+      ? dcRowHTML('（内訳）会社の退職金＋その他退職所得', Utils.yen(r.lumpFull.otherRetirement))
+        + dcRowHTML('（内訳）退職所得の合計（控除枠の判定に使用）', Utils.yen(r.lumpFull.combinedAmount))
+      : '';
+
+    var lumpCard =
+      '<div class="dc-card'+(method==='lump'?' is-selected':'')+'">' +
+        (method==='lump' ? '<span class="badge">選択中</span>' : '') +
+        '<h3>💰 一時金として受け取る場合</h3>' +
+        dcRowHTML('DC一時金 税引前受取額', Utils.yen(r.lumpFull.grossAmount)) +
+        otherRetireHTML +
+        dcRowHTML('退職所得控除額（合算ベース）', Utils.yen(r.lumpFull.deduction)) +
+        dcRowHTML('概算課税所得（DC分の増分・1/2後）', Utils.yen(r.lumpFull.taxableIncome)) +
+        dcRowHTML('概算税額（DC分の増分）', Utils.yen(r.lumpFull.tax)) +
+        dcRowHTML('概算手取り（DC分）', Utils.yen(r.lumpFull.net), true) +
+      '</div>';
+
+    var pensionCard =
+      '<div class="dc-card'+(method==='pension'?' is-selected':'')+'">' +
+        (method==='pension' ? '<span class="badge">選択中</span>' : '') +
+        '<h3>📆 年金として受け取る場合</h3>' +
+        dcRowHTML('税引前受取額（年額）', Utils.yen(r.pensionFull.grossAmount)) +
+        dcRowHTML('公的年金との合算年額', Utils.yen(r.pensionFull.combinedAnnual)) +
+        dcRowHTML('控除後の概算雑所得（合算）', Utils.yen(r.pensionFull.zatsuCombined)) +
+        dcRowHTML('概算税額（DC分の目安）', Utils.yen(r.pensionFull.tax)) +
+        dcRowHTML('概算手取り（年額）', Utils.yen(r.pensionFull.net), true) +
+        dcRowHTML('参考：受取年数分の手取り累計', Utils.man(r.pensionFull.net*state.dcPayoutYears)) +
+      '</div>';
+
+    var bothCard =
+      '<div class="dc-card'+(method==='both'?' is-selected':'')+'">' +
+        (method==='both' ? '<span class="badge">選択中</span>' : '') +
+        '<h3>🔀 併用（比較用：50％ずつ）</h3>' +
+        '<div class="hint" style="margin:-6px 0 10px;">本試算では、比較のため一時金50％・年金50％として計算します。実際の併用割合や受取可否は、利用している運営管理機関によって異なります。</div>' +
+        '<div class="dc-sub-title">一時金部分（残高の50%）</div>' +
+        dcRowHTML('税引前受取額', Utils.yen(r.both.lump.grossAmount)) +
+        dcRowHTML('概算課税所得（1/2後）', Utils.yen(r.both.lump.taxableIncome)) +
+        dcRowHTML('概算税額', Utils.yen(r.both.lump.tax)) +
+        dcRowHTML('概算手取り', Utils.yen(r.both.lump.net), true) +
+        '<div class="dc-sub-title">年金部分（残高の50%・年額）</div>' +
+        dcRowHTML('税引前受取額（年額）', Utils.yen(r.both.pension.grossAmount)) +
+        dcRowHTML('概算税額（年額）', Utils.yen(r.both.pension.tax)) +
+        dcRowHTML('概算手取り（年額）', Utils.yen(r.both.pension.net), true) +
+        '<div class="dc-sub-title">合計（初年ベースの目安）</div>' +
+        dcRowHTML('概算手取り合計', Utils.yen(r.both.totalNetFirstYear), true) +
+      '</div>';
+
+    grid.innerHTML = lumpCard + pensionCard + bothCard;
+  }
+
+  function renderDCChart(state){
+    var r = state.dcResult;
+    var lumpTotal = r.lumpFull.net;
+    var pensionTotal = r.pensionFull.net * state.dcPayoutYears;
+    var bothTotal = r.both.lump.net + (r.both.pension.net * state.dcPayoutYears);
+
+    var ctx = document.getElementById('chart-dc-compare').getContext('2d');
+    if(charts.dc) charts.dc.destroy();
+    charts.dc = new Chart(ctx, {
+      type:'bar',
+      data:{
+        labels:['一時金', '年金（'+state.dcPayoutYears+'年累計）', '併用：比較用50%（'+state.dcPayoutYears+'年累計）'],
+        datasets:[{
+          label:'概算手取り総額の目安',
+          data:[Math.round(lumpTotal), Math.round(pensionTotal), Math.round(bothTotal)],
+          backgroundColor:['#5499f5','#002f6c','#7ea9e0']
+        }]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:function(c){ return Utils.yen(c.raw); } } } },
+        scales:{ y:{ ticks:{ callback:function(v){ return Utils.man(v); } } } }
+      }
+    });
+  }
+
+  function renderDCTable(state){
+    var r = state.dcResult;
+    var tbody = document.getElementById('dc-table-body');
+    var pensionTotalGross = r.pensionFull.grossAmount;
+    var bothGross = r.both.lump.grossAmount + r.both.pension.grossAmount;
+
+    var rowsHTML = '';
+    rowsHTML += dcTableRow('一時金', r.lumpFull.grossAmount, r.lumpFull.taxableIncome, r.lumpFull.tax, r.lumpFull.net, '今年の税負担が軽くなりやすい傾向');
+    rowsHTML += dcTableRow('年金（年額）', pensionTotalGross, r.pensionFull.zatsuCombined, r.pensionFull.tax, r.pensionFull.net, '長期で平準化しやすい／公的年金と重なると課税感が増える可能性');
+    rowsHTML += dcTableRow('併用（比較用：50%ずつ・初年年額ベース）', bothGross, (r.both.lump.taxableIncome+r.both.pension.zatsuCombined), (r.both.lump.tax+r.both.pension.tax), r.both.totalNetFirstYear, '一時金と年金、両方の特徴をバランスよく持つ可能性がある組み合わせ例');
+    tbody.innerHTML = rowsHTML;
+  }
+  function dcTableRow(name, gross, taxable, tax, net, label){
+    return '<tr>' +
+      '<td data-label="受取方法">'+name+'</td>' +
+      '<td data-label="税引前受取額">'+Utils.yen(gross)+'</td>' +
+      '<td data-label="概算課税所得">'+Utils.yen(taxable)+'</td>' +
+      '<td data-label="概算税額">'+Utils.yen(tax)+'</td>' +
+      '<td data-label="概算手取り">'+Utils.yen(net)+'</td>' +
+      '<td data-label="ひとことメモ">'+label+'</td>' +
+    '</tr>';
+  }
+
+  function renderDCLabelSummary(state){
+    var r = state.dcResult;
+    var box = document.getElementById('dc-label-summary');
+    var msgs = [];
+
+    var lumpEffRate = r.lumpFull.grossAmount>0 ? r.lumpFull.tax/r.lumpFull.grossAmount : 0;
+    var pensionEffRate = r.pensionFull.grossAmount>0 ? r.pensionFull.tax/r.pensionFull.grossAmount : 0;
+
+    msgs.push('<div class="dc-label-row">🏷 一時金は退職所得控除と1/2課税により、今年の税負担が軽くなりやすい傾向があります（概算実効負担率 約'+(lumpEffRate*100).toFixed(1)+'%）。</div>');
+    msgs.push('<div class="dc-label-row">🏷 年金は毎年少しずつ受け取るため、税・社会保険の負担を長期で平準化しやすい可能性があります。</div>');
+    if(state.dcPublicPension + state.dcAnnualPension > 3300000){
+      msgs.push('<div class="dc-label-row">🏷 公的年金と合算すると所得区分が上がり、課税感が増える可能性があります（合算年額 '+Utils.man(state.dcPublicPension+state.dcAnnualPension)+'）。</div>');
+    }
+    msgs.push('<div class="dc-label-row">🏷 併用（比較用：50%ずつ）は、まとまった資金を一部確保しつつ、残りを平準化する組み合わせの一例です。実際に選べる割合は運営管理機関により異なります。</div>');
+    box.innerHTML = msgs.join('');
+  }
+
+  return { renderPublicTab:renderPublicTab, renderDCTab:renderDCTab };
+})();
+</script>
+
+<!-- =========================================================
+     Script 6: アプリ制御（状態管理・イベント・初期化）
+========================================================= -->
+<script>
+window.App = (function(){
+  'use strict';
+
+  var state = {
+    // 公的年金タブ
+    inputMode: 'simple',      // 'simple' or 'detail'
+    baseAnnual: 1800000,      // 65歳受取時点の想定年金額（年額）
+    earlyRate: 0.004,
+    lifeAge: 90,
+    applyTax: true,
+    selectedAge: 65,
+    publicRows: [],
+    estimate: null,           // 詳細入力モードでの推計結果キャッシュ
+
+    // DCタブ
+    dcBalance: 5000000,
+    dcMethod: 'both',
+    dcServiceYears: 20,
+    dcCompanySeverance: 0,
+    dcOtherRetirement: 0,
+    dcPayoutYears: 10,
+    dcAnnualPension: 500000,
+    dcAnnualPensionDirty: false, // 手動編集フラグ
+    dcPublicPension: 1800000,
+    dcResult: null
+  };
+
+  function switchTab(tab){
+    try{
+      var isPublic = tab === 'public';
+      document.getElementById('tab-public').hidden = !isPublic;
+      document.getElementById('tab-dc').hidden = isPublic;
+      document.getElementById('tab-btn-public').classList.toggle('active', isPublic);
+      document.getElementById('tab-btn-dc').classList.toggle('active', !isPublic);
+      document.getElementById('tab-btn-public').setAttribute('aria-selected', isPublic);
+      document.getElementById('tab-btn-dc').setAttribute('aria-selected', !isPublic);
+    }catch(e){ console.error(e); Utils.showError('タブ切り替えでエラーが発生しました'); }
+  }
+
+  function selectPublicAge(age){
+    state.selectedAge = age;
+    recalcPublic();
+  }
+
+  // かんたん入力／詳細入力の切り替え
+  function setInputMode(mode){
+    try{
+      state.inputMode = mode;
+      var isSimple = mode === 'simple';
+      document.getElementById('simple-input-group').style.display = isSimple ? '' : 'none';
+      document.getElementById('detail-input-group').style.display = isSimple ? 'none' : '';
+      document.getElementById('mode-btn-simple').classList.toggle('active', isSimple);
+      document.getElementById('mode-btn-detail').classList.toggle('active', !isSimple);
+      recalcPublic();
+    }catch(e){ console.error(e); Utils.showError('入力モードの切り替えでエラーが発生しました'); }
+  }
+
+  // 詳細入力（働き方）から年金額を推計し、結果ボックスに反映
+  function updateEstimateFromDetail(){
+    var kouseiYears = Utils.clampNumber(document.getElementById('dtl-kousei-years').value, 0, 55, 30);
+    var avgIncome = Utils.clampNumber(document.getElementById('dtl-avg-income').value, 0, 999999999, 5000000);
+    var kokuminYears = Utils.clampNumber(document.getElementById('dtl-kokumin-years').value, 0, 40, 10);
+
+    var result = PensionEstimate.estimateTotal(kouseiYears, avgIncome, kokuminYears);
+    state.estimate = result;
+
+    document.getElementById('estimate-kiso').textContent = Utils.yen(result.kiso);
+    document.getElementById('estimate-kousei').textContent = Utils.yen(result.kousei);
+    document.getElementById('estimate-total').textContent = Utils.yenMan(result.total);
+
+    return result.total;
+  }
+
+  function readPublicInputs(){
+    if(state.inputMode === 'simple'){
+      var baseAnnualEl = document.getElementById('pension-base-annual');
+      state.baseAnnual = Utils.clampNumber(baseAnnualEl.value, 0, 20000000, 1800000);
+    }else{
+      state.baseAnnual = updateEstimateFromDetail();
+    }
+    state.earlyRate = parseFloat(Utils.getRadioValue('early-rate')) || 0.004;
+    state.lifeAge = parseInt(Utils.getRadioValue('life-age'),10) || 90;
+    state.applyTax = document.getElementById('tax-toggle').checked;
+  }
+
+  function recalcPublic(){
+    try{
+      readPublicInputs();
+      // 選択年齢が範囲外にならないよう補正
+      if(state.selectedAge < 60) state.selectedAge = 60;
+      if(state.selectedAge > 75) state.selectedAge = 75;
+      Render.renderPublicTab(state);
+    }catch(e){
+      console.error(e);
+      Utils.showError('公的年金タブの計算でエラーが発生しました。入力値をご確認ください。');
+    }
+  }
+
+  function readDCInputs(){
+    state.dcBalance = Utils.clampNumber(document.getElementById('dc-balance').value, 0, 999999999, 5000000);
+    state.dcMethod = Utils.getRadioValue('dc-method') || 'both';
+    state.dcServiceYears = Utils.clampNumber(document.getElementById('dc-service-years').value, 1, 60, 20);
+    state.dcCompanySeverance = Utils.clampNumber(document.getElementById('dc-company-severance').value, 0, 999999999, 0);
+    state.dcOtherRetirement = Utils.clampNumber(document.getElementById('dc-other-retirement').value, 0, 999999999, 0);
+    state.dcPayoutYears = parseInt(document.getElementById('dc-payout-years').value,10) || 10;
+    state.dcPublicPension = Utils.clampNumber(document.getElementById('dc-public-pension').value, 0, 999999999, 1800000);
+
+    var annualEl = document.getElementById('dc-annual-pension');
+    if(!state.dcAnnualPensionDirty){
+      var auto = Math.round(state.dcBalance / state.dcPayoutYears);
+      annualEl.value = auto;
+      state.dcAnnualPension = auto;
+    }else{
+      state.dcAnnualPension = Utils.clampNumber(annualEl.value, 0, 999999999, 500000);
+    }
+  }
+
+  function recalcDC(){
+    try{
+      readDCInputs();
+      Render.renderDCTab(state);
+    }catch(e){
+      console.error(e);
+      Utils.showError('DC/iDeCoタブの計算でエラーが発生しました。入力値をご確認ください。');
+    }
+  }
+
+  function bindEvents(){
+    // 公的年金タブ：かんたん入力
+    document.getElementById('pension-base-annual').addEventListener('input', recalcPublic);
+    document.getElementById('tax-toggle').addEventListener('change', recalcPublic);
+    document.getElementsByName('early-rate').forEach(function(el){
+      el.addEventListener('change', function(){ syncChipGroup('early-rate-group'); recalcPublic(); });
+    });
+    document.getElementsByName('life-age').forEach(function(el){
+      el.addEventListener('change', function(){ syncChipGroup('life-age-group'); recalcPublic(); });
+    });
+
+    // 公的年金タブ：詳細入力（働き方から推計）
+    ['dtl-kousei-years','dtl-avg-income','dtl-kokumin-years'].forEach(function(id){
+      document.getElementById(id).addEventListener('input', recalcPublic);
+    });
+
+    // DCタブ
+    document.getElementById('dc-balance').addEventListener('input', recalcDC);
+    document.getElementById('dc-service-years').addEventListener('input', recalcDC);
+    document.getElementById('dc-company-severance').addEventListener('input', recalcDC);
+    document.getElementById('dc-other-retirement').addEventListener('input', recalcDC);
+    document.getElementById('dc-payout-years').addEventListener('change', recalcDC);
+    document.getElementById('dc-public-pension').addEventListener('input', recalcDC);
+    document.getElementById('dc-annual-pension').addEventListener('input', function(){
+      state.dcAnnualPensionDirty = true;
+      recalcDC();
+    });
+    document.getElementsByName('dc-method').forEach(function(el){
+      el.addEventListener('change', function(){ syncChipGroup('dc-method-group'); recalcDC(); });
+    });
+  }
+
+  // ラジオチップの見た目（checked class）を同期
+  function syncChipGroup(groupId){
+    var group = document.getElementById(groupId);
+    if(!group) return;
+    var chips = group.querySelectorAll('.radio-chip');
+    chips.forEach(function(chip){
+      var input = chip.querySelector('input');
+      chip.classList.toggle('checked', input.checked);
+    });
+  }
+
+  function init(){
+    try{
+      bindEvents();
+      recalcPublic();
+      recalcDC();
+    }catch(e){
+      console.error(e);
+      Utils.showError('初期化中にエラーが発生しました。ページを再読み込みしてください。');
+    }
+  }
+
+  return {
+    switchTab: switchTab,
+    selectPublicAge: selectPublicAge,
+    setInputMode: setInputMode,
+    init: init
+  };
+})();
+
+document.addEventListener('DOMContentLoaded', App.init);
+</script>
+
+</body>
+</html>
