@@ -53,6 +53,18 @@ export const tools: Tool[] = [
     featured: true,
   },
   {
+    title: "年金受取シミュレーター",
+    category: "退職後資金 / 年金 / 税金",
+    categories: ["退職後資金", "資産形成"],
+    status: "公開中",
+    description:
+      "退職金COMPASSから年金の受け取り計算部分を独立させた概算シミュレーターです。公的年金の受取開始年齢による違いや、企業型DC・iDeCoの一時金・年金・併用受取を比較し、相談前の整理に使えます。",
+    url: "/lifecompasslab/tools/pension-receipt-simulator/",
+    buttonLabel: "試してみる",
+    icon: "compass",
+    featured: false,
+  },
+  {
     title: "家計コンパスmini",
     category: "ライフプラン / 家計管理",
     categories: ["ライフプラン", "家計管理"],
