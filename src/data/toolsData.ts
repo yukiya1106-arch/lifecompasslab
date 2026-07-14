@@ -70,8 +70,8 @@ export const tools: Tool[] = [
     categories: ["ライフプラン", "家計管理"],
     status: "公開中",
     description:
-      "簡易的なライフプランシミュレーションツールです。細かい入力をしすぎず、将来のお金の流れをサクッと確認できます。まずは大まかな方向性をつかみたい方向けの、軽量版シミュレーターです。",
-    url: "https://e8dc0699-0510-4583-a144-b3979889542c.vip.gensparksite.com/",
+      "誰でも直感的に入力できる、簡易的なライフプラン診断ツールです。家族構成、収入、資産、住まい、保険、生活費などを入力し、家計の現在地や将来のお金の流れをざっくり確認できます。",
+    url: "/lifecompasslab/tools/kakei-compass-mini/",
     buttonLabel: "試してみる",
     icon: "chart",
     featured: true,

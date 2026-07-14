@@ -10,6 +10,15 @@ export type LabLog = {
 export const labLogs: LabLog[] = [
   {
     date: "2026.07.14",
+    title: "家計コンパスminiの計算ロジックを修正",
+    summary: "家計コンパスminiの計算ロジックを修正しました。",
+    body:
+      "家計コンパスminiの計算ロジックを修正しました。生活費の逆算、年次キャッシュフロー、住宅ローン、教育費、年金、資産推移などの計算エンジンを見直し、入力内容から家計の現在地と将来の見通しをより直感的に確認できるようにしました。",
+    linkLabel: "家計コンパスminiを開く",
+    linkUrl: "/lifecompasslab/tools/kakei-compass-mini/",
+  },
+  {
+    date: "2026.07.14",
     title: "ライフプラン電卓を追加",
     summary:
       "生活費の逆算、使途不明金の見える化、住宅ローン、資産運用の複利計算をまとめて試せるミニツール集を追加しました。",
