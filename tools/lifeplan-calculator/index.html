@@ -1,0 +1,171 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ライフプラン電卓</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+      body {
+        font-family: 'Noto Sans JP', sans-serif;
+        background-color: #f9fafb;
+      }
+      .animate-fade-in {
+          animation: fadeIn 0.4s ease-out forwards;
+      }
+      @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Print Styles */
+      @media print {
+        @page { margin: 8mm; size: A4 portrait; }
+        
+        body { 
+            background: white !important; 
+            color: black !important;
+            height: auto;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            font-size: 11px; /* Smaller font base for print */
+        }
+        
+        /* Hide everything by default */
+        body > * {
+            display: none !important;
+        }
+
+        #root {
+            display: block !important;
+        }
+
+        #root > div {
+            display: block !important;
+            background: white !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        header, footer, .no-print, button {
+            display: none !important;
+        }
+
+        main {
+            padding: 0 !important;
+            margin: 0 !important;
+            display: block !important;
+            max-width: none !important;
+        }
+
+        /* Show active tab content */
+        .printable-content {
+            display: block !important;
+            position: relative !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: white !important;
+        }
+
+        /* Compact Layout Helpers for Print */
+        .print\:grid-cols-4 {
+            display: grid !important;
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            gap: 0.5rem !important;
+        }
+        
+        .print\:grid-cols-3 {
+            display: grid !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            gap: 1rem !important;
+        }
+        
+        .print\:col-span-2 {
+            grid-column: span 2 / span 2 !important;
+        }
+
+        .print\:h-48 {
+            height: 12rem !important;
+        }
+        
+        .print\:h-40 {
+            height: 10rem !important;
+        }
+        
+        .print\:text-xs {
+            font-size: 0.65rem !important;
+            line-height: 1rem !important;
+        }
+        
+        .print\:text-sm {
+            font-size: 0.75rem !important;
+        }
+        
+        .print\:text-lg {
+            font-size: 1.125rem !important;
+        }
+        
+        .print\:text-xl {
+            font-size: 1.25rem !important;
+        }
+
+        .print\:p-2 {
+            padding: 0.5rem !important;
+        }
+        
+        .print\:p-4 {
+            padding: 1rem !important;
+        }
+        
+        .print\:mb-2 {
+            margin-bottom: 0.5rem !important;
+        }
+        
+        .print\:mb-4 {
+            margin-bottom: 1rem !important;
+        }
+
+        .print\:gap-2 {
+            gap: 0.5rem !important;
+        }
+
+        /* Ensure charts print properly */
+        .recharts-responsive-container {
+            width: 100% !important;
+        }
+        
+        /* Enhance contrast for print */
+        .bg-blue-50, .bg-gray-50, .bg-emerald-50, .bg-amber-50, .bg-green-50, .bg-orange-50 {
+            background-color: #f3f4f6 !important; 
+        }
+        
+        .text-white {
+            color: black !important;
+        }
+      }
+    </style>
+
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.0"
+  }
+}
+</script>
+  <script type="module" crossorigin src="./assets/index-D-haIZ0z.js"></script>
+</head>
+  <body>
+    <div id="root"></div>
+</body>
+</html>
