@@ -77,6 +77,18 @@ export const tools: Tool[] = [
     featured: true,
   },
   {
+    title: "ライフプラン電卓",
+    category: "ライフプラン / 家計管理 / 住宅購入 / 資産形成",
+    categories: ["ライフプラン", "家計管理", "住宅購入", "資産形成"],
+    status: "公開中",
+    description:
+      "手取り収入から固定費を引いて生活費を逆算したり、使途不明金を洗い出したりできるミニツール集です。住宅ローンの返済目安や、資産運用の複利計算もまとめて確認できます。",
+    url: "/lifecompasslab/tools/lifeplan-calculator/",
+    buttonLabel: "試してみる",
+    icon: "chart",
+    featured: false,
+  },
+  {
     title: "住宅ローン控除COMPASS",
     category: "住宅購入 / 税金",
     categories: ["住宅購入", "家計管理"],
