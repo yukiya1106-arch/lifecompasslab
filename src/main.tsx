@@ -20,6 +20,7 @@ const navItems = [
   { label: "Lab Log", href: "#/lab-log" },
   { label: "Note", href: "#note" },
   { label: "Data", href: "#/data" },
+  { label: "About", href: "#/about-site" },
   { label: "Contact", href: "#/contact" },
 ];
 
@@ -356,7 +357,13 @@ function AboutSitePage() {
             本サイト上で、金融商品の購入、証券口座の開設、保険契約、不動産取引等の案内・媒介・取次ぎは行いません。
           </p>
           <p>
-            現時点で、本サイトには金融商品、証券口座、保険商品等に関する広告、アフィリエイトリンク、紹介リンク、個別相談の受付窓口は設置していません。
+            本サイトでは、ツールに関するご質問、改善のご提案、ご自身の場合について整理したい方からのお問い合わせを受け付けています。
+          </p>
+          <p>
+            LIFE COMPASS LABは、石井悠己也が個人で運営する研究・情報発信プロジェクトです。個別の家計、住宅、資産形成、保険、退職後資金などに関するご相談については、内容を確認したうえで、所属先であるFP Office株式会社の相談窓口をご案内する場合があります。
+          </p>
+          <p>
+            このフォームへのお問い合わせだけで、FP Office株式会社への相談申込みや顧客登録が行われることはありません。
           </p>
           <p>
             各種ツールの試算結果は、入力条件に基づく概算であり、実際の税額、控除額、社会保険料、住宅ローン審査、相続税額等とは異なる場合があります。
@@ -443,24 +450,32 @@ function ContactPage() {
           <p className="mb-4 text-xs font-bold tracking-[0.22em] text-blue">CONTACT</p>
           <h1 className="mb-6 text-[clamp(2.8rem,7vw,5rem)] font-semibold leading-none text-navy">CONTACT</h1>
           <p className="max-w-sm text-base leading-8 text-sub md:text-lg">
-            LIFE COMPASS LABへの感想、改善要望、不具合報告、ツール追加の希望などを受け付けています。
+            LIFE COMPASS LABへのご意見・ご感想、不具合報告、改善のご提案、ご相談、取材・研修・協業などのお問い合わせを受け付けています。
           </p>
         </div>
         <div className="border-t border-blue/20 pt-8">
           <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-lightBlue text-blue">
             <Mail aria-hidden="true" size={24} />
           </div>
-          <h2 className="mb-5 text-3xl font-semibold leading-tight text-navy md:text-4xl">感想・改善案を送る</h2>
+          <h2 className="mb-5 text-3xl font-semibold leading-tight text-navy md:text-4xl">お問い合わせ内容を送る</h2>
           <div className="max-w-3xl space-y-4 text-base leading-8 text-sub md:text-lg">
             <p>LIFE COMPASS LABは、使っていただいた方の声をもとに少しずつ改善していきます。</p>
-            <p>使ってみた感想、不具合、改善アイデア、追加してほしい機能などがあれば、お気軽にお寄せください。</p>
-            <p>個別の金融商品、税務判断、住宅購入可否などの具体的なご相談には、このフォーム上では回答できない場合があります。</p>
+            <p>
+              ツールへのご意見・ご感想、不具合報告、改善アイデア、ご自身の場合について整理したい方からのご相談、取材・研修・協業などのお問い合わせを受け付けています。
+            </p>
+            <p>
+              お問い合わせ内容を確認のうえ、必要に応じて適切な方法をご案内します。すべてのお問い合わせへの回答をお約束するものではありませんので、あらかじめご了承ください。
+            </p>
+            <p>
+              家計、住宅、資産形成、保険、退職後資金などの個別相談については、内容を確認したうえで、石井悠己也が所属するFP Office株式会社の相談窓口をご案内する場合があります。
+            </p>
+            <p>このフォームへの入力だけで、FP Office株式会社への相談申込みや顧客登録が行われることはありません。</p>
           </div>
           <div className="my-8 max-w-3xl border-y border-blue/20 bg-lightBlue/45 py-5 text-sm font-semibold leading-7 text-navy">
-            氏名、住所、勤務先、金融機関の口座情報、マイナンバーなど、個人を直接特定できる情報や機微な情報は入力しないでください。
+            このフォームには、住所、勤務先の詳細、金融機関の口座情報、マイナンバー、保険証券番号など、個人を直接特定できる情報や機微な情報は入力しないでください。
           </div>
           <Button href={contactFormUrl} variant="primary">
-            フォームを開く
+            お問い合わせフォームを開く
           </Button>
           <p className="mt-4 text-xs text-sub">外部フォームが新しいタブまたは現在のタブで開きます。</p>
         </div>
@@ -596,6 +611,11 @@ function AboutSection() {
           <p>
             大きく見せるより、一つずつ積み上げる。課題を、仕組みで解決する。そんな職人型のプロジェクトとして育てていきます。
           </p>
+          <div className="pt-1">
+            <Button href="#/about-site" variant="secondary">
+              プロフィール・活動について
+            </Button>
+          </div>
         </div>
       </div>
     </section>
@@ -630,7 +650,7 @@ function HomeContactSection() {
           <p className="mb-4 text-xs font-bold tracking-[0.22em] text-blue">CONTACT</p>
           <h2 className="mb-5 text-4xl font-semibold leading-tight md:text-5xl">CONTACT</h2>
           <p className="max-w-2xl text-base leading-8 text-white/74 md:text-lg">
-            LIFE COMPASS LABは、使っていただいた方の声をもとに少しずつ改善していきます。感想、不具合、改善アイデア、追加してほしい機能などをお寄せください。
+            LIFE COMPASS LABへのご意見・ご感想、不具合報告、改善のご提案、ご相談、取材・研修・協業などのお問い合わせを受け付けています。内容に応じて、適切な方法をご案内します。
           </p>
         </div>
         <a
@@ -638,7 +658,7 @@ function HomeContactSection() {
           className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-white px-6 py-3 font-semibold text-navy transition hover:bg-lightBlue"
         >
           <Mail aria-hidden="true" size={18} />
-          フォームを開く
+          お問い合わせフォームへ
         </a>
       </div>
     </section>
@@ -655,7 +675,7 @@ function Footer() {
         </div>
         <div className="flex flex-col gap-2 md:items-end">
           <a href="#/about-site" className="text-xs font-semibold text-sub transition hover:text-navy">
-            このサイトについて
+            運営者・このサイトについて
           </a>
           <p>© 2026 LIFE COMPASS LAB</p>
         </div>
