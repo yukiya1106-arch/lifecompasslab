@@ -1,931 +1,545 @@
-/**
- * app.js
- * =========================================================
- * 家計コンパス β版 - メインアプリケーション
- *
- * 役割：
- *  - 画面遷移（トップ → 入力 → 結果）
- *  - localStorageへの自動保存・復元
- *  - 入力ステップのレンダリング
- *  - 進捗バーの更新
- *  - 条件付き表示の制御
- *  - モーダル（PDF選択・データ削除確認）
- *  - 月額返済額の自動計算
- *  - 生活費逆算ロジック（STEP4）
- * =========================================================
- */
+(function () {
+  'use strict';
 
-'use strict';
+  const E = window.CompassEngine;
+  const STORAGE_KEY = 'compass_plan_light_v1';
+  const app = document.getElementById('app');
+  const safeStorage = {
+    get(key){ try { return window.localStorage.getItem(key); } catch (_) { return null; } },
+    set(key,value){ try { window.localStorage.setItem(key,value); return true; } catch (_) { return false; } },
+    remove(key){ try { window.localStorage.removeItem(key); } catch (_) {} }
+  };
+  const STEPS = [
+    ['family', '家族'], ['income', '収入'], ['living', '生活費'], ['assets', '資産'],
+    ['housing', '住まい'], ['other', '備え・予定'], ['review', '確認']
+  ];
 
-// =========================================================
-// 定数
-// =========================================================
-const STORAGE_KEY      = 'kakeibo_compass_v1'; // バージョン番号付きキー
-const STORAGE_VERSION  = 1;
+  let state = loadState() || E.defaultData();
+  let currentStep = 0;
+  let screen = 'landing';
+  let lastResult = null;
 
-// =========================================================
-// アプリケーション状態
-// =========================================================
-let currentStep = 0;   // 現在のステップインデックス (0-indexed)
-let formData    = {};  // 入力データオブジェクト
+  function deepMerge(base, extra) {
+    if (Array.isArray(extra)) return extra;
+    if (!extra || typeof extra !== 'object') return extra === undefined ? base : extra;
+    const out = Object.assign({}, base);
+    Object.keys(extra).forEach((k) => {
+      out[k] = extra[k] && typeof extra[k] === 'object' && !Array.isArray(extra[k])
+        ? deepMerge(base && base[k] || {}, extra[k])
+        : extra[k];
+    });
+    return out;
+  }
 
-// =========================================================
-// localStorage ユーティリティ
-// =========================================================
-const Storage = {
-  /**
-   * データを保存する
-   * @param {object} data - 保存するデータ
-   * @param {number} step - 現在のステップ（省略時は currentStep を使用）
-   */
-  save(data, step) {
+  function loadState() {
     try {
-      const payload = {
-        version: STORAGE_VERSION,
-        savedAt: new Date().toISOString(),
-        step:    (step !== undefined) ? step : currentStep,
-        data:    data,
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } catch (e) {
-      console.warn('[家計コンパス] localStorage保存失敗:', e);
-    }
-  },
-
-  /**
-   * データを読み込む
-   * @returns {object|null} 保存されたデータ or null
-   */
-  load() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = safeStorage.get(STORAGE_KEY);
       if (!raw) return null;
-      const payload = JSON.parse(raw);
-      if (payload.version !== STORAGE_VERSION) {
-        console.info('[家計コンパス] バージョン不一致のため無視');
-        return null;
-      }
-      return payload;
-    } catch (e) {
-      console.warn('[家計コンパス] localStorage読込失敗:', e);
-      return null;
-    }
-  },
-
-  /** データを全削除する */
-  clear() {
-    localStorage.removeItem(STORAGE_KEY);
-  },
-
-  /** 保存データが存在するか確認する */
-  hasData() {
-    return !!localStorage.getItem(STORAGE_KEY);
-  },
-
-};
-
-// =========================================================
-// ユーティリティ
-// =========================================================
-
-/**
- * ネストしたオブジェクトのパスに値をセットする
- */
-function setNestedValue(obj, path, value) {
-  const keys = path.split('.');
-  let current = obj;
-  for (let i = 0; i < keys.length - 1; i++) {
-    const key = keys[i];
-    const nextIsIndex = !isNaN(parseInt(keys[i + 1]));
-    if (current[key] === undefined || current[key] === null) {
-      current[key] = nextIsIndex ? [] : {};
-    }
-    current = current[key];
-  }
-  current[keys[keys.length - 1]] = value;
-}
-
-/**
- * 数値を3桁区切りで表示する（万円表記）
- */
-function formatYen(val) {
-  const n = parseFloat(val);
-  if (isNaN(n)) return '―';
-  return n.toLocaleString('ja-JP') + ' 万円';
-}
-
-// =========================================================
-// 月額返済額の自動計算（住宅ローン表示用）
-// =========================================================
-function calcMonthlyRepaymentApp(principal, annualRate, termYears) {
-  const P = principal * 10000; // 円換算
-  const r = annualRate / 100 / 12;
-  const n = termYears * 12;
-  if (r === 0 || n === 0) return P / Math.max(n, 1) / 10000;
-  const monthly = P * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1);
-  return monthly / 10000; // 万円で返す
-}
-
-// =========================================================
-// 入力値の収集（現在のステップ）
-// =========================================================
-function collectCurrentStep() {
-  const container = document.getElementById('step-content');
-  if (!container) return;
-
-  container.querySelectorAll('input[data-save-key]').forEach(el => {
-    const key = el.getAttribute('data-save-key');
-    if (el.type === 'radio') {
-      if (el.checked) setNestedValue(formData, key, el.value);
-    } else if (el.type === 'checkbox') {
-      setNestedValue(formData, key, el.checked);
-    } else {
-      setNestedValue(formData, key, el.value);
-    }
-  });
-
-  container.querySelectorAll('select[data-save-key]').forEach(el => {
-    const key = el.getAttribute('data-save-key');
-    setNestedValue(formData, key, el.value);
-  });
-}
-
-// =========================================================
-// 自動保存
-// =========================================================
-function autoSave() {
-  collectCurrentStep();
-  Storage.save(formData);
-}
-
-// =========================================================
-// 進捗バーの更新
-// =========================================================
-function updateProgress() {
-  const total   = STEPS.length;
-  const percent = Math.round((currentStep / (total - 1)) * 100);
-
-  const bar = document.getElementById('progress-bar');
-  if (bar) bar.style.width = percent + '%';
-
-  const text = document.getElementById('progress-text');
-  if (text) text.textContent = `STEP ${currentStep + 1} / ${total}：${STEPS[currentStep].title}`;
-
-  const labelsEl = document.getElementById('progress-labels');
-  if (labelsEl) {
-    labelsEl.innerHTML = STEPS.map((s, i) => {
-      let cls = 'progress-dot';
-      if (i < currentStep)      cls += ' done';
-      else if (i === currentStep) cls += ' current';
-      return `<div class="${cls}" title="${s.title}"></div>`;
-    }).join('');
-  }
-}
-
-// =========================================================
-// ステップのレンダリング
-// =========================================================
-function renderStep(index) {
-  const stepId  = STEPS[index].id;
-  const builder = StepBuilders[stepId];
-  if (!builder) return;
-
-  const container = document.getElementById('step-content');
-  container.innerHTML = builder(formData);
-
-  // 「戻る」ボタン
-  const prevBtn = document.getElementById('btn-prev');
-  if (prevBtn) prevBtn.style.visibility = index === 0 ? 'hidden' : 'visible';
-
-  // 「次へ」ボタン（最終ステップは「診断を見る」）
-  const nextBtn = document.getElementById('btn-next');
-  if (nextBtn) {
-    if (index === STEPS.length - 1) {
-      nextBtn.innerHTML = '<i class="fa-solid fa-chart-bar"></i> 診断を見る';
-      nextBtn.classList.add('btn-accent');
-    } else {
-      nextBtn.innerHTML = '次へ <i class="fa-solid fa-chevron-right"></i>';
-      nextBtn.classList.remove('btn-accent');
-    }
+      return deepMerge(E.defaultData(), JSON.parse(raw));
+    } catch (_) { return null; }
   }
 
-  updateProgress();
-  attachStepEvents(stepId);
-
-  // 上部へスクロール
-  const inputMain = document.querySelector('.input-main');
-  if (inputMain) inputMain.scrollTop = 0;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-// =========================================================
-// ステップごとのイベントアタッチ
-// =========================================================
-function attachStepEvents(stepId) {
-  const container = document.getElementById('step-content');
-  if (!container) return;
-
-  // --- 全ステップ共通：入力変更で自動保存 ---
-  container.querySelectorAll('input, select, textarea').forEach(el => {
-    el.addEventListener('change', () => autoSave());
-    if (el.tagName === 'INPUT' && el.type !== 'radio' && el.type !== 'checkbox') {
-      el.addEventListener('input', () => autoSave());
-    }
-  });
-
-  // --- STEP 1: 家族構成 ---
-  if (stepId === 'family') {
-    container.querySelectorAll('input[name="has-spouse"]').forEach(el => {
-      el.addEventListener('change', () => {
-        const block = document.getElementById('spouse-block');
-        if (block) block.style.display = el.value === 'yes' ? '' : 'none';
-        autoSave();
-      });
-    });
-
-    const ccEl = document.getElementById('children-count');
-    if (ccEl) {
-      ccEl.addEventListener('change', () => {
-        autoSave();
-        renderStep(currentStep);
-      });
-    }
+  function saveState() {
+    state.meta.version = E.VERSION;
+    safeStorage.set(STORAGE_KEY, JSON.stringify(state));
   }
 
-  // --- STEP 4: 生活費と教育（逆算パネル） ---
-  if (stepId === 'living') {
-    attachLivingReverseEvents();
+  function clearState() {
+    safeStorage.remove(STORAGE_KEY);
+    state = E.defaultData();
   }
 
-  // --- STEP 6: 万一への備え ---
-  if (stepId === 'insurance') {
-    attachInsuranceEvents();
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
   }
 
-  // --- STEP 6: 住まい ---
-  if (stepId === 'housing') {
-    container.querySelectorAll('input[name="current-type"]').forEach(el => {
-      el.addEventListener('change', () => {
-        const block = document.getElementById('loan-block');
-        if (block) block.style.display = el.value === 'own' ? '' : 'none';
-        autoSave();
-      });
-    });
+  function n(value, fallback = 0) {
+    const x = Number(value);
+    return Number.isFinite(x) ? x : fallback;
+  }
 
-    container.querySelectorAll('input[name="purchase-plan"]').forEach(el => {
-      el.addEventListener('change', () => {
-        const block = document.getElementById('purchase-block');
-        if (block) block.style.display = el.value === 'yes' ? '' : 'none';
-        autoSave();
-      });
-    });
+  function getPath(obj, path) {
+    return path.split('.').reduce((v, key) => v == null ? undefined : v[key], obj);
+  }
 
-    container.querySelectorAll('input[name="repay-mode"]').forEach(el => {
-      el.addEventListener('change', () => {
-        const manualBlock = document.getElementById('repay-manual-block');
-        const autoBlock   = document.getElementById('repay-auto-result');
-        if (manualBlock) manualBlock.style.display = el.value === 'manual' ? '' : 'none';
-        if (autoBlock)   autoBlock.style.display   = el.value === 'auto'   ? '' : 'none';
-        autoSave();
-      });
-    });
-
-    container.querySelectorAll('input[name="misc-in-loan"]').forEach(el => {
-      el.addEventListener('change', () => {
-        updateRepayCalc();
-        autoSave();
-      });
-    });
-
-    ['h-price', 'h-down', 'h-interest', 'h-term', 'h-misc'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.addEventListener('input', () => {
-          updateRepayCalc();
-          autoSave();
-        });
+  function setPath(obj, path, value) {
+    const parts = path.split('.');
+    let cur = obj;
+    parts.forEach((p, i) => {
+      const key = /^\d+$/.test(p) ? Number(p) : p;
+      if (i === parts.length - 1) cur[key] = value;
+      else {
+        const nextIsArray = /^\d+$/.test(parts[i + 1]);
+        if (cur[key] == null) cur[key] = nextIsArray ? [] : {};
+        cur = cur[key];
       }
     });
-
-    // 初期表示時に計算を実行
-    updateRepayCalc();
   }
 
-  // --- STEP 8: 確認画面（各セクションの「修正する」ボタン） ---
-  if (stepId === 'confirm') {
-    container.querySelectorAll('button[data-goto-step]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const targetStep = parseInt(btn.getAttribute('data-goto-step'));
-        collectCurrentStep();
-        autoSave();
-        goToStep(targetStep);
-      });
-    });
-  }
-}
-
-// =========================================================
-// 月額返済額の自動計算表示（住宅ローン）
-// =========================================================
-function updateRepayCalc() {
-  const price    = parseFloat(document.getElementById('h-price')?.value    || 0);
-  const down     = parseFloat(document.getElementById('h-down')?.value     || 0);
-  const rate     = parseFloat(document.getElementById('h-interest')?.value || 0);
-  const term     = parseFloat(document.getElementById('h-term')?.value     || 0);
-  const miscRate = parseFloat(document.getElementById('h-misc')?.value     || 6);
-
-  const calcText = document.getElementById('repay-calc-text');
-  if (!calcText) return;
-
-  if (!price || !term) {
-    calcText.textContent = '物件価格・頭金・金利・期間を入力すると月額返済額を計算します';
-    return;
+  function formatWan(value, digits = 0) {
+    const x = n(value);
+    return `${x.toLocaleString('ja-JP', { maximumFractionDigits: digits })}万円`;
   }
 
-  const misc       = price * (miscRate / 100);
-  const miscInLoan = document.querySelector('input[name="misc-in-loan"]:checked')?.value === 'yes';
-  const principal  = Math.max(0, price - down + (miscInLoan ? misc : 0));
-  const monthly    = calcMonthlyRepaymentApp(principal, rate, term);
-  const totalRepay = monthly * term * 12;
-
-  calcText.innerHTML = `
-    借入額：<strong>${principal.toLocaleString('ja-JP', {maximumFractionDigits:0})} 万円</strong>
-    　月額返済：<strong>${monthly.toLocaleString('ja-JP', {minimumFractionDigits:1, maximumFractionDigits:1})} 万円/月</strong>
-    　総返済額：<strong>${totalRepay.toLocaleString('ja-JP', {maximumFractionDigits:0})} 万円</strong>
-    （利息含む・概算）`;
-}
-
-// =========================================================
-// 画面切り替え
-// =========================================================
-function showScreen(name) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  const target = document.getElementById(`screen-${name}`);
-  if (target) target.classList.add('active');
-  window.scrollTo({ top: 0 });
-}
-
-// =========================================================
-// 特定のステップへジャンプ（入力値を保持したまま）
-// =========================================================
-function goToStep(targetIndex) {
-  currentStep = Math.max(0, Math.min(targetIndex, STEPS.length - 1));
-  showScreen('input');
-  renderStep(currentStep);
-}
-
-// グローバル公開（steps.jsのconfirm画面から呼ぶ用）
-window.goToStep = goToStep;
-
-// =========================================================
-// トップ画面の初期化
-// =========================================================
-function initTopScreen() {
-  const resumeBtn = document.getElementById('btn-resume');
-  if (resumeBtn) {
-    resumeBtn.style.display = Storage.hasData() ? 'flex' : 'none';
+  function formatPct(value) {
+    return value == null ? '—' : `${n(value).toLocaleString('ja-JP', { maximumFractionDigits: 1 })}%`;
   }
-}
 
-// =========================================================
-// 入力画面の開始
-// =========================================================
-function startInput(fromResume = false) {
-  if (fromResume) {
-    // 「前回の続きから再開」: ステップも復元
-    const saved = Storage.load();
-    if (saved) {
-      formData    = saved.data || {};
-      currentStep = Math.min(saved.step || 0, STEPS.length - 1);
-    }
-  } else {
-    // 「新規診断」: データをクリアしてSTEP0から
-    formData    = {};
-    currentStep = 0;
+  function bool(value) { return value === true || value === 'yes'; }
+  function checked(value) { return bool(value) ? 'checked' : ''; }
+  function selected(value, target) { return String(value) === String(target) ? 'selected' : ''; }
+
+  function field(path, label, value, unit, opts = {}) {
+    const type = opts.type || 'number';
+    const min = opts.min != null ? `min="${opts.min}"` : '';
+    const max = opts.max != null ? `max="${opts.max}"` : '';
+    const step = opts.step != null ? `step="${opts.step}"` : '';
+    const placeholder = opts.placeholder ? `placeholder="${esc(opts.placeholder)}"` : '';
+    return `<div class="form-group ${opts.full ? 'full' : ''}">
+      <label for="${esc(path)}">${label}${opts.optional ? ' <span class="muted small">任意</span>' : ''}</label>
+      <div class="field"><input id="${esc(path)}" type="${type}" data-path="${esc(path)}" value="${esc(value)}" ${min} ${max} ${step} ${placeholder}>${unit ? `<span class="unit">${unit}</span>` : ''}</div>
+      ${opts.hint ? `<div class="hint">${opts.hint}</div>` : ''}
+    </div>`;
   }
-  showScreen('input');
-  renderStep(currentStep);
-}
 
-// =========================================================
-// 「入力を修正する」から特定ステップへ（入力値は保持）
-// =========================================================
-function editFromResult(targetStep = 0) {
-  // データは保持し、ステップだけを変更
-  currentStep = Math.max(0, Math.min(targetStep, STEPS.length - 1));
-  // localStorageのstepも更新（再開時に変な場所へ飛ばないよう）
-  Storage.save(formData, currentStep);
-  showScreen('input');
-  renderStep(currentStep);
-}
-
-// グローバル公開
-window.editFromResult = editFromResult;
-
-// =========================================================
-// 前のステップへ
-// =========================================================
-function prevStep() {
-  collectCurrentStep();
-  autoSave();
-  if (currentStep > 0) {
-    currentStep--;
-    renderStep(currentStep);
+  function selectField(path, label, value, options, opts = {}) {
+    return `<div class="form-group ${opts.full ? 'full' : ''}">
+      <label for="${esc(path)}">${label}</label>
+      <div class="field"><select id="${esc(path)}" data-path="${esc(path)}">
+        ${options.map(([v, t]) => `<option value="${esc(v)}" ${selected(value, v)}>${esc(t)}</option>`).join('')}
+      </select></div>${opts.hint ? `<div class="hint">${opts.hint}</div>` : ''}
+    </div>`;
   }
-}
 
-// =========================================================
-// 次のステップへ（常に現在ステップ+1）
-// =========================================================
-function nextStep() {
-  collectCurrentStep();
-  autoSave();
-
-  if (currentStep < STEPS.length - 1) {
-    currentStep++;
-    renderStep(currentStep);
-  } else {
-    // 最終ステップ（確認画面）→ 結果画面へ
-    showScreen('result');
-    ResultRenderer.render(formData);
+  function toggleField(path, label, value, hint = '') {
+    return `<div class="form-group full"><label class="choice"><input type="checkbox" data-path="${esc(path)}" ${checked(value)}> ${label}</label>${hint ? `<div class="hint">${hint}</div>` : ''}</div>`;
   }
-}
 
-// =========================================================
-// データ削除確認モーダル
-// =========================================================
-function openClearModal() {
-  const modal = document.getElementById('modal-clear');
-  if (modal) modal.style.display = 'flex';
-}
-function closeClearModal() {
-  const modal = document.getElementById('modal-clear');
-  if (modal) modal.style.display = 'none';
-}
-function confirmClearData() {
-  Storage.clear();
-  formData    = {};
-  currentStep = 0;
-  closeClearModal();
-  initTopScreen();
-  showScreen('top');
-}
+  function header() {
+    return `<header class="app-header"><div class="container header-inner">
+      <button class="brand" data-action="landing" aria-label="トップへ"><img src="assets/compass-logo.png" alt=""><span>COMPASS PLAN <small>light</small></span></button>
+      <div class="header-actions">
+        <button class="btn btn-ghost btn-small hide-mobile" data-action="save-json">入力データ保存</button>
+        <button class="btn btn-ghost btn-small" data-action="reset">リセット</button>
+      </div>
+    </div></header>`;
+  }
 
-// =========================================================
-// PDF選択モーダル
-// =========================================================
-function openPdfModal() {
-  const modal = document.getElementById('modal-pdf');
-  if (modal) modal.style.display = 'flex';
-}
-function closePdfModal() {
-  const modal = document.getElementById('modal-pdf');
-  if (modal) modal.style.display = 'none';
-}
+  function landing() {
+    const hasSaved = !!safeStorage.get(STORAGE_KEY);
+    return `<section class="hero"><div class="container hero-inner">
+      <div>
+        <div class="brand-kicker">LIFE COMPASS LAB</div>
+        <h1>COMPASS PLAN<span>LIGHT</span></h1>
+        <p class="hero-copy">家計の数字を並べるだけではなく、住宅・教育・働き方などの選択が、将来のお金にどう影響するかを確認するためのライト版ライフプランツールです。</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary" data-action="new">新しく作成する →</button>
+          ${hasSaved ? '<button class="btn btn-light" data-action="resume">前回の続きから</button>' : ''}
+          <button class="btn btn-outline" style="color:white;border-color:rgba(255,255,255,.45)" data-action="sample">サンプルを見る</button>
+        </div>
+        <div class="hero-note">入力内容はこの端末内にのみ保存され、外部には送信されません。</div>
+      </div>
+      <div class="hero-mark"><img class="hero-logo" src="assets/compass-logo.png" alt="COMPASS PLANのコンパス"></div>
+    </div></section>`;
+  }
 
-// =========================================================
-// イベントリスナーの初期化
-// =========================================================
-function initEvents() {
-  // --- トップ画面 ---
-  document.getElementById('btn-start')?.addEventListener('click',  () => startInput(false));
-  document.getElementById('btn-resume')?.addEventListener('click', () => startInput(true));
-  document.getElementById('btn-clear-data-top')?.addEventListener('click', openClearModal);
+  function sidebar() {
+    const pct = ((currentStep + 1) / STEPS.length) * 100;
+    return `<aside class="sidebar">
+      <div class="progress-wrap"><div class="progress-meta"><span>入力の進捗</span><strong>${currentStep + 1} / ${STEPS.length}</strong></div><div class="progress"><span style="width:${pct}%"></span></div></div>
+      <nav class="step-nav">${STEPS.map(([id, label], i) => `<button data-action="goto" data-step="${i}" class="${i === currentStep ? 'active' : ''} ${i < currentStep ? 'done' : ''}"><span class="num">${i < currentStep ? '✓' : i + 1}</span><span class="text">${label}</span></button>`).join('')}</nav>
+      <div class="sidebar-note">細かく分からない項目は概算で構いません。結果画面に、概算箇所と前提条件を明示します。</div>
+    </aside>`;
+  }
 
-  // --- 入力画面ナビ ---
-  document.getElementById('btn-prev')?.addEventListener('click', prevStep);
-  document.getElementById('btn-next')?.addEventListener('click', nextStep);
-  document.getElementById('btn-input-back-top')?.addEventListener('click', () => {
-    collectCurrentStep();
-    autoSave();
-    showScreen('top');
-    initTopScreen();
-  });
+  function familyStep() {
+    const f = state.family;
+    const children = Array.isArray(f.children) ? f.children : [];
+    return `<div class="page-head"><div class="eyebrow">Step 1</div><h2>家族とこれからの予定</h2><p>現在の家族だけでなく、将来予定しているお子さまも登録できます。</p></div>
+      <section class="section"><h3>大人の年齢</h3><div class="form-grid">
+        ${field('family.selfAge', '本人の年齢', f.selfAge, '歳', {min:18,max:85})}
+        <div class="form-group"><label>配偶者</label><div class="choice-row">
+          <label class="choice"><input type="radio" name="spouse" data-path="family.hasSpouse" value="yes" ${bool(f.hasSpouse) ? 'checked' : ''}> いる</label>
+          <label class="choice"><input type="radio" name="spouse" data-path="family.hasSpouse" value="no" ${!bool(f.hasSpouse) ? 'checked' : ''}> いない</label>
+        </div></div>
+        ${bool(f.hasSpouse) ? field('family.spouseAge','配偶者の年齢',f.spouseAge,'歳',{min:18,max:85}) : ''}
+      </div></section>
+      <section class="section"><h3>お子さま</h3>
+        <div class="info-box"><strong>計算上の扱い：</strong>現在いるお子さまの生活費は、入力する現在の基本生活費に含まれる前提です。将来は成長段階との差分だけを加減するため、初年度から二重計上しません。</div>
+        <div class="repeat-list" style="margin-top:14px">${children.map((c,i)=>childCard(c,i)).join('')}</div>
+        <button class="add-btn" data-action="add-child">＋ お子さまを追加</button>
+      </section>`;
+  }
 
-  // --- 結果画面 ---
-  document.getElementById('btn-result-back')?.addEventListener('click', () => {
-    // 結果画面から「戻る」→ 確認画面（最終ステップ）を表示
-    currentStep = STEPS.length - 1;
-    showScreen('input');
-    renderStep(currentStep);
-  });
-  document.getElementById('btn-print')?.addEventListener('click', () => window.print());
+  function childCard(c, i) {
+    const planned = c.timing === 'planned';
+    return `<div class="repeat-card">
+      <div class="repeat-card-head"><div class="repeat-title">${esc(c.label || `第${i+1}子`)}</div><button class="icon-btn" data-action="remove-child" data-index="${i}" title="削除">×</button></div>
+      <div class="form-grid three">
+        <div class="form-group"><label>登録区分</label><div class="choice-row">
+          <label class="choice"><input type="radio" name="child-timing-${i}" data-path="family.children.${i}.timing" value="existing" ${!planned?'checked':''}> 現在いる</label>
+          <label class="choice"><input type="radio" name="child-timing-${i}" data-path="family.children.${i}.timing" value="planned" ${planned?'checked':''}> 将来予定</label>
+        </div></div>
+        ${planned ? field(`family.children.${i}.yearsUntilBirth`,'誕生まで',c.yearsUntilBirth||1,'年後',{min:1,max:20}) : field(`family.children.${i}.age`,'現在の年齢',c.age||0,'歳',{min:0,max:25})}
+        ${field(`family.children.${i}.currentEducation`,'現在の教育費',c.currentEducation||0,'万円/年',{min:0,max:1000,optional:true,hint:'現在と同じ学校段階にいる間は、この実額を優先します。'})}
+        ${selectField(`family.children.${i}.finalEdu`,'最終学歴',c.finalEdu||'university',[["high","高校"],["vocational","専門学校"],["junior","短期大学"],["university","4年制大学"]])}
+        ${selectField(`family.children.${i}.route`,'進学ルート',c.route||'public',[["public","すべて公立・国公立"],["universityPrivate","大学から私立"],["highPrivate","高校から私立"],["middlePrivate","中学から私立"],["private","幼稚園からすべて私立"]])}
+        ${selectField(`family.children.${i}.away`,'大学等の通学',bool(c.away)?'yes':'no',[["no","自宅通学"],["yes","自宅外を想定"]],{hint:'自宅外は年48万円を概算加算します。'})}
+      </div>
+    </div>`;
+  }
 
-  // --- PDF モーダル ---
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('#btn-pdf-save');
-    if (btn) openPdfModal();
-  });
-  document.getElementById('btn-pdf-detail')?.addEventListener('click', () => {
-    closePdfModal();
-    PdfExporter.export('detail', formData);
-  });
-  document.getElementById('btn-pdf-simple')?.addEventListener('click', () => {
-    closePdfModal();
-    PdfExporter.export('simple', formData);
-  });
-  document.getElementById('btn-pdf-cancel')?.addEventListener('click', closePdfModal);
+  function personSection(key, title, baseAge) {
+    const p = state.income[key];
+    const changes = Array.isArray(p.changes) ? p.changes : [];
+    return `<section class="section"><h3>${title}</h3><div class="form-grid three">
+      ${field(`income.${key}.gross`,'現在の額面年収',p.gross,'万円',{min:0,max:10000})}
+      ${field(`income.${key}.net`,'現在の手取り年収',p.net,'万円',{min:0,max:10000,optional:true,hint:'未入力の場合は連続性のある概算式で推計します。'})}
+      ${field(`income.${key}.otherAnnual`,'その他の年収',p.otherAnnual||0,'万円/年',{min:0,max:10000,optional:true})}
+      ${field(`income.${key}.otherIncomeEndAge`,'その他収入の終了年齢',p.otherIncomeEndAge||p.retireAge||65,'歳',{min:baseAge,max:110,optional:true,hint:'家賃収入など退職後も続く場合は終了年齢を延ばしてください。'})}
+      ${field(`income.${key}.growthRate`,'毎年の上昇率',p.growthRate||0,'%/年',{min:-20,max:20,step:.1})}
+      ${field(`income.${key}.growthUntilAge`,'上昇を続ける年齢',p.growthUntilAge||baseAge,'歳まで',{min:baseAge,max:85,hint:'この年齢以降は、次の変更点まで横ばいです。'})}
+      ${field(`income.${key}.retireAge`,'就業終了年齢',p.retireAge||65,'歳',{min:baseAge+1,max:85})}
+      ${field(`income.${key}.pensionStartAge`,'年金受給開始',p.pensionStartAge||65,'歳',{min:60,max:75})}
+      ${field(`income.${key}.pensionMonthly65`,'65歳基準の年金月額',p.pensionMonthly65||0,'万円/月',{min:0,max:100,step:.1,optional:true})}
+      ${field(`income.${key}.severance`,'退職金',p.severance||0,'万円',{min:0,max:50000,optional:true,hint:'税引前の概算。税金は本ライト版では未反映です。'})}
+    </div>
+    <div style="margin-top:18px"><div class="label">年齢ごとの収入変更</div><div class="hint" style="margin-bottom:10px">例：55歳から年収600万円、60歳から年収350万円。変更後も、上の上昇率が「上昇を続ける年齢」まで適用されます。</div>
+      <div class="repeat-list">${changes.map((c,i)=>`<div class="repeat-card"><div class="form-grid three">
+        ${field(`income.${key}.changes.${i}.age`,'変更年齢',c.age,'歳',{min:baseAge,max:85})}
+        ${field(`income.${key}.changes.${i}.gross`,'その年齢からの額面年収',c.gross,'万円',{min:0,max:10000})}
+        <div class="form-group"><label>&nbsp;</label><button class="btn btn-danger btn-small" data-action="remove-income-change" data-person="${key}" data-index="${i}">この変更を削除</button></div>
+      </div></div>`).join('')}</div>
+      <button class="add-btn" data-action="add-income-change" data-person="${key}">＋ 収入変更点を追加</button>
+    </div></section>`;
+  }
 
-  // --- 削除確認モーダル ---
-  document.getElementById('btn-clear-confirm')?.addEventListener('click', confirmClearData);
-  document.getElementById('btn-clear-cancel')?.addEventListener('click', closeClearModal);
+  function incomeStep() {
+    return `<div class="page-head"><div class="eyebrow">Step 2</div><h2>働き方と収入の変化</h2><p>「毎年○％」だけでなく、役職定年・再雇用・転職などの年収変更を年齢ごとに設定できます。</p></div>
+      ${personSection('self','本人の収入',n(state.family.selfAge,35))}
+      ${bool(state.family.hasSpouse) ? personSection('spouse','配偶者の収入',n(state.family.spouseAge,33)) : ''}
+      <div class="info-box"><strong>手取り推計：</strong>額面年収帯の境界で手取りが逆転しないよう、複数の基準点を線形補間しています。実際の税・社会保険は家族構成等で異なるため、手取り実額の入力を推奨します。</div>`;
+  }
 
-  // モーダル外クリックで閉じる
-  document.getElementById('modal-pdf')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closePdfModal();
-  });
-  document.getElementById('modal-clear')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closeClearModal();
-  });
+  function livingStep() {
+    const l = state.living, m = state.meta;
+    return `<div class="page-head"><div class="eyebrow">Step 3</div><h2>生活費と物価上昇</h2><p>住宅費・教育費・保険料・積立を除いた、現在の基本生活費を入力します。</p></div>
+      <section class="section"><h3>現在の支出</h3><div class="form-grid">
+        ${field('living.baseAnnual','基本生活費',l.baseAnnual,'万円/年',{min:0,max:3000,hint:'食費・光熱費・通信費・日用品・小遣い等。現在いるお子さまの日常生活費を含めます。'})}
+        ${field('living.otherAnnual','その他の年間支出',l.otherAnnual||0,'万円/年',{min:0,max:3000,hint:'旅行、車検、冠婚葬祭など。'})}
+        ${field('meta.inflationRate','物価上昇率',m.inflationRate,'%/年',{min:-3,max:10,step:.1,hint:'基本生活費・教育費・住居維持費などに反映します。'})}
+        ${field('meta.horizonAge','計算終了年齢',m.horizonAge||90,'歳',{min:n(state.family.selfAge,35)+1,max:110})}
+        ${toggleField('living.inflateOther','その他の年間支出にも物価上昇を反映',l.inflateOther)}
+        ${toggleField('living.childLivingAdjust','子どもの成長・独立による生活費変化を反映',l.childLivingAdjust,'現在いる子は現在との差分だけ、将来予定の子は誕生後の概算額を加算します。')}
+      </div></section>
+      <section class="section"><h3>教育費の前提</h3><div class="info-box">幼稚園から高校までは文部科学省「令和5年度 子供の学習費調査（2026年訂正後）」の学習費総額を年額化。大学はJASSO調査を基に、国公立約60万円・私立約131万円、自宅外は年48万円を概算加算しています。実際の進学先や授業料支援制度は個別に異なります。</div></section>`;
+  }
 
-  // --- 結果画面の動的ボタン（イベント委任） ---
-  document.getElementById('result-main')?.addEventListener('click', (e) => {
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    if (btn.id === 'btn-pdf-save')       openPdfModal();
-    if (btn.id === 'btn-consult-email')  openConsultEmail();
-    if (btn.id === 'btn-result-recalc') {
-      // 「入力を修正する」→ STEP1（家族構成）から（入力値は保持）
-      editFromResult(0);
-    }
-    // data-edit-step 属性付きボタンは対応するステップへ直接ジャンプ
-    const editStep = btn.getAttribute('data-edit-step');
-    if (editStep !== null) {
-      editFromResult(parseInt(editStep));
-    }
-  });
-}
+  function assetsStep() {
+    const a=state.assets;
+    return `<div class="page-head"><div class="eyebrow">Step 4</div><h2>現在の資産と積立</h2><p>現預金・いつでも使える運用資産・受取時期が限られる退職資産を分けて計算します。</p></div>
+      <section class="section"><h3>現在の残高</h3><div class="form-grid three">
+        ${field('assets.cash','現預金',a.cash,'万円',{min:0,max:100000})}
+        ${field('assets.investment','NISA等の運用資産',a.investment,'万円',{min:0,max:100000})}
+        ${field('assets.retirement','DC・iDeCo等',a.retirement,'万円',{min:0,max:100000})}
+      </div></section>
+      <section class="section"><h3>運用と積立</h3><div class="form-grid three">
+        ${field('assets.investReturn','運用資産の想定利回り',a.investReturn,'%/年',{min:-20,max:20,step:.1})}
+        ${field('assets.monthlyInvestment','手取りからの積立',a.monthlyInvestment,'万円/月',{min:0,max:300,step:.1,hint:'NISA等。積立分は現金から運用資産への移動として処理します。'})}
+        ${field('assets.investmentEndAge','積立終了年齢',a.investmentEndAge,'歳',{min:n(state.family.selfAge,35),max:90})}
+        ${field('assets.retirementReturn','DC等の想定利回り',a.retirementReturn,'%/年',{min:-20,max:20,step:.1})}
+        ${field('assets.monthlyRetirement','DC・iDeCo等の積立',a.monthlyRetirement,'万円/月',{min:0,max:300,step:.1,hint:'入力する手取り年収が、この拠出前の金額であることを確認してください。'})}
+        ${field('assets.retirementContributionEndAge','DC等の積立終了',a.retirementContributionEndAge,'歳',{min:n(state.family.selfAge,35),max:75})}
+        ${field('assets.retirementReceiveAge','DC等の受取年齢',a.retirementReceiveAge,'歳',{min:55,max:75,hint:'受取年の年初に全額を現金へ移す簡易計算です。税金は未反映です。'})}
+      </div></section>
+      <div class="warning-box"><strong>資産不足の扱い：</strong>現預金が不足した場合は、まずNISA等の流動資産を取り崩します。受取可能年齢以降はDC等も使用し、それでも不足する額は「累積不足額」として隠さず表示します。</div>`;
+  }
 
-// =========================================================
-// メール相談を開く
-// =========================================================
-function openConsultEmail() {
-  const to      = 'yukiya.fp1106@gmail.com';
-  const subject = encodeURIComponent('家計コンパスの個別相談について');
-  const body    = encodeURIComponent(
-    '家計コンパスの診断結果について相談を希望します。\n診断結果のPDFを添付のうえ、お問い合わせください。'
-  );
-  window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
-}
+  function housingStep() {
+    const h=state.housing;
+    return `<div class="page-head"><div class="eyebrow">Step 5</div><h2>現在の住まいと購入計画</h2><p>購入前の住居費、購入時の初期費用、ローン、購入後の維持費を分けて計算します。</p></div>
+      <section class="section"><h3>現在の住居費</h3><div class="form-grid three">
+        ${selectField('housing.currentType','現在の住まい',h.currentType||'rent',[["rent","賃貸"],["owner","持ち家"],["family","実家・社宅等"]])}
+        ${field('housing.monthlyCost','現在の月額住居費',h.monthlyCost,'万円/月',{min:0,max:300,step:.1,hint:'家賃または住宅ローン・管理費等の合計。'})}
+        ${field('housing.currentCostEndAge','現在の住居費の終了年齢',h.currentCostEndAge||99,'歳',{min:n(state.family.selfAge,35),max:110,hint:'賃貸を継続する場合は99歳など。購入する場合は購入年から自動停止します。'})}
+        ${field('housing.currentAnnualAfterEnd','終了後の年間維持費',h.currentAnnualAfterEnd||0,'万円/年',{min:0,max:1000,hint:'持ち家のローン完済後に残る固定資産税・管理費・修繕費等。賃貸は0で構いません。'})}
+      </div></section>
+      <section class="section"><h3>住宅購入</h3><div class="form-grid">
+        ${toggleField('housing.purchasePlan','住宅購入を予定している',h.purchasePlan)}
+      </div>
+      ${bool(h.purchasePlan) ? `<div class="form-grid three" style="margin-top:16px">
+        ${field('housing.buyAge','購入年齢',h.buyAge,'歳',{min:n(state.family.selfAge,35)+1,max:85})}
+        ${field('housing.price','物件価格',h.price,'万円',{min:0,max:100000})}
+        ${field('housing.downPayment','頭金',h.downPayment,'万円',{min:0,max:100000})}
+        ${field('housing.miscRate','購入諸費用',h.miscRate,'%',{min:0,max:20,step:.1})}
+        ${selectField('housing.miscInLoan','諸費用の扱い',bool(h.miscInLoan)?'yes':'no',[["no","現金で支払う"],["yes","ローンに含める"]])}
+        ${field('housing.loanTerm','返済期間',h.loanTerm,'年',{min:1,max:50})}
+        ${field('housing.interestRate','借入金利',h.interestRate,'%/年',{min:0,max:15,step:.01})}
+        ${field('housing.annualMaintenance','固定資産税・維持費',h.annualMaintenance,'万円/年',{min:0,max:1000,hint:'管理費・修繕積立金・固定資産税・修繕費等の概算。物価上昇を反映します。'})}
+      </div>` : ''}</section>
+      <div class="info-box"><strong>年次の扱い：</strong>「40歳で購入」は40歳になる年の年初に購入すると仮定します。その年は現在の家賃を計上せず、初期費用・ローン返済・維持費を計上します。住宅の資産価値は金融資産に含めません。</div>`;
+  }
 
-// グローバル公開
-window.openConsultEmail = openConsultEmail;
-window.openPdfModal     = openPdfModal;
+  function otherStep() {
+    const ins=state.insurance, events=Array.isArray(state.events)?state.events:[];
+    return `<div class="page-head"><div class="eyebrow">Step 6</div><h2>保険料とライフイベント</h2><p>自動的に「退職後30％」などとはせず、実際の払込終了年齢を設定します。</p></div>
+      <section class="section"><h3>保険料</h3><div class="form-grid">
+        ${field('insurance.annualPremium','年間保険料',ins.annualPremium,'万円/年',{min:0,max:2000})}
+        ${field('insurance.premiumEndAge','払込終了年齢',ins.premiumEndAge,'歳',{min:n(state.family.selfAge,35),max:100,hint:'払込済みの場合は現在年齢未満ではなく、年間保険料を0にしてください。'})}
+      </div></section>
+      <section class="section"><h3>一時的な収入・支出</h3><div class="hint" style="margin-bottom:12px">車の購入、リフォーム、贈与、相続、旅行などを本人年齢で追加できます。</div>
+        <div class="repeat-list">${events.map((ev,i)=>eventCard(ev,i)).join('')}</div>
+        <button class="add-btn" data-action="add-event">＋ ライフイベントを追加</button>
+      </section>`;
+  }
 
-// =========================================================
-// 万一への備えパネル - イベントハンドラ
-// =========================================================
-function attachInsuranceEvents() {
-  const container = document.getElementById('step-content');
-  if (!container) return;
+  function eventCard(ev,i){
+    return `<div class="repeat-card"><div class="repeat-card-head"><div class="repeat-title">${esc(ev.label||`イベント${i+1}`)}</div><button class="icon-btn" data-action="remove-event" data-index="${i}">×</button></div>
+      <div class="form-grid three">
+        ${field(`events.${i}.label`,'名称',ev.label||'', '', {type:'text',placeholder:'例：車の買い替え'})}
+        ${field(`events.${i}.ageSelf`,'本人年齢',ev.ageSelf||n(state.family.selfAge,35)+5,'歳',{min:n(state.family.selfAge,35)+1,max:110})}
+        ${selectField(`events.${i}.kind`,'区分',ev.kind||'expense',[["expense","支出"],["income","収入"]])}
+        ${field(`events.${i}.amount`,'金額',ev.amount||0,'万円',{min:0,max:100000})}
+        ${selectField(`events.${i}.inflate`,'物価上昇',bool(ev.inflate)?'yes':'no',[["no","現在価値のまま"],["yes","物価上昇を反映"]])}
+      </div></div>`;
+  }
 
-  // ---- 死亡保障の有無ラジオ ----
-  const lifeInsRadios = container.querySelectorAll('input[name="has-life-ins"]');
-  lifeInsRadios.forEach(el => {
-    el.addEventListener('change', () => {
-      updateInsuranceBlocks();
-      autoSave();
-    });
-  });
+  function reviewStep() {
+    const f=state.family, l=state.living, a=state.assets, h=state.housing, i=state.insurance;
+    const childCount=(f.children||[]).length;
+    const incomeChanges=(state.income.self.changes||[]).length + (bool(f.hasSpouse)?(state.income.spouse.changes||[]).length:0);
+    return `<div class="page-head"><div class="eyebrow">Step 7</div><h2>入力内容の確認</h2><p>この内容で、現在時点の資産を0年目として将来の年次キャッシュフローを計算します。</p></div>
+      <div class="review-grid">
+        ${reviewCard('家族',[['本人',`${f.selfAge}歳`],['配偶者',bool(f.hasSpouse)?`${f.spouseAge}歳`:'なし'],['子ども',`${childCount}人`]])}
+        ${reviewCard('収入',[['本人年収',formatWan(state.income.self.gross)],['本人退職',`${state.income.self.retireAge}歳`],['収入変更点',`${incomeChanges}件`]])}
+        ${reviewCard('生活費',[['基本生活費',formatWan(l.baseAnnual)],['その他支出',formatWan(l.otherAnnual)],['物価上昇率',`${state.meta.inflationRate}%`]])}
+        ${reviewCard('資産',[['現預金',formatWan(a.cash)],['運用資産',formatWan(a.investment)],['DC等',formatWan(a.retirement)]])}
+        ${reviewCard('住まい',[['現在住居費',`${h.monthlyCost}万円/月`],['購入予定',bool(h.purchasePlan)?`${h.buyAge}歳・${formatWan(h.price)}`:'なし'],['維持費',bool(h.purchasePlan)?formatWan(h.annualMaintenance):'—']])}
+        ${reviewCard('備え・予定',[['年間保険料',formatWan(i.annualPremium)],['払込終了',`${i.premiumEndAge}歳`],['イベント',`${(state.events||[]).length}件`]])}
+      </div>
+      <div class="warning-box" style="margin-top:18px"><strong>本ツールの範囲：</strong>将来の方向性を確認するための概算です。所得税・社会保険料・退職所得税、住宅ローン控除、児童手当、教育無償化、住宅資産価値などは個別計算していません。結果画面では、金融資産と資金不足を分けて表示します。</div>`;
+  }
 
-  // ---- 受取方法ラジオ ----
-  const receiveRadios = container.querySelectorAll('input[name="ins-receive-type"]');
-  receiveRadios.forEach(el => {
-    el.addEventListener('change', () => {
-      updateInsuranceBlocks();
-      autoSave();
-    });
-  });
+  function reviewCard(title, pairs){
+    return `<div class="review-card"><h4>${title}</h4><dl class="review-list">${pairs.map(([a,b])=>`<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl></div>`;
+  }
 
-  // ---- 保障額・保険料の入力 → 試算表示更新 ----
-  ['ins-lump', 'ins-income-monthly', 'ins-income-until', 'ins-monthly-premium'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.addEventListener('input', () => {
-        updateInsuranceSummary();
-        updateInsurancePremiumRatio();
-        autoSave();
-      });
-    }
-  });
-
-  // 初期描画
-  updateInsuranceBlocks();
-}
-
-/**
- * 死亡保障の有無・受取方法に応じて各ブロックを表示/非表示切替
- */
-function updateInsuranceBlocks() {
-  const container = document.getElementById('step-content');
-  if (!container) return;
-
-  const hasLifeIns  = container.querySelector('input[name="has-life-ins"]:checked')?.value  || '';
-  const receiveType = container.querySelector('input[name="ins-receive-type"]:checked')?.value || '';
-
-  const detailBlock  = document.getElementById('ins-detail-block');
-  const noCoverNote  = document.getElementById('ins-no-coverage-note');
-  const lumpBlock    = document.getElementById('ins-lump-block');
-  const annuityBlock = document.getElementById('ins-annuity-block');
-  const unsureNote   = document.getElementById('ins-unsure-note');
-
-  // 詳細ブロックの表示制御
-  if (detailBlock)  detailBlock.style.display  = hasLifeIns === 'yes' ? '' : 'none';
-
-  // 「なし/わからない」案内の表示制御
-  if (noCoverNote) {
-    if (hasLifeIns === 'no' || hasLifeIns === 'unsure') {
-      noCoverNote.style.display = '';
-      noCoverNote.innerHTML = `
-        <div class="alert alert-warn">
-          <i class="fa-solid fa-triangle-exclamation"></i>
-          <div>死亡保障の内容を確認してください。診断上は保障額0円として計算します。</div>
-        </div>`;
-    } else {
-      noCoverNote.style.display = 'none';
-      noCoverNote.innerHTML = '';
+  function stepContent() {
+    switch (STEPS[currentStep][0]) {
+      case 'family': return familyStep();
+      case 'income': return incomeStep();
+      case 'living': return livingStep();
+      case 'assets': return assetsStep();
+      case 'housing': return housingStep();
+      case 'other': return otherStep();
+      default: return reviewStep();
     }
   }
 
-  // 受取方法に応じた入力ブロック
-  const showLump    = (receiveType === 'lump'    || receiveType === 'both');
-  const showAnnuity = (receiveType === 'annuity' || receiveType === 'both');
-
-  if (lumpBlock)    lumpBlock.style.display    = showLump    ? '' : 'none';
-  if (annuityBlock) annuityBlock.style.display = showAnnuity ? '' : 'none';
-  if (unsureNote)   unsureNote.style.display   = receiveType === 'unsure' ? '' : 'none';
-
-  // 保障額試算を更新
-  updateInsuranceSummary();
-}
-
-/**
- * 死亡保障の試算表示を更新
- */
-function updateInsuranceSummary() {
-  const container = document.getElementById('step-content');
-  if (!container) return;
-
-  const selfAge     = parseInt(formData.family?.ageSelf || 35);
-  const receiveType = container.querySelector('input[name="ins-receive-type"]:checked')?.value || '';
-  const hasLifeIns  = container.querySelector('input[name="has-life-ins"]:checked')?.value  || '';
-
-  const summaryDiv = document.getElementById('ins-coverage-summary');
-  const textDiv    = document.getElementById('ins-coverage-text');
-  if (!summaryDiv || !textDiv) return;
-
-  if (hasLifeIns !== 'yes' || !receiveType || receiveType === 'unsure') {
-    summaryDiv.style.display = 'none';
-    return;
+  function editor() {
+    return `${header()}<main class="app-main"><div class="container shell">${sidebar()}<section class="panel">${stepContent()}
+      <div id="form-error" class="warning-box hidden" style="margin-top:18px"></div>
+      <div class="form-actions"><button class="btn btn-ghost" data-action="back" ${currentStep===0?'disabled':''}>← 戻る</button><div class="right">
+        ${currentStep===STEPS.length-1?'<button class="btn btn-primary" data-action="calculate">結果を見る →</button>':'<button class="btn btn-primary" data-action="next">次へ →</button>'}
+      </div></div>
+    </section></div></main>`;
   }
 
-  const lumpVal    = parseFloat(document.getElementById('ins-lump')?.value          || 0);
-  const annuityMV  = parseFloat(document.getElementById('ins-income-monthly')?.value || 0);
-  const annuityEnd = parseInt(document.getElementById('ins-income-until')?.value     || 65);
-  const remainYrs  = Math.max(0, annuityEnd - selfAge);
-  const annuityEq  = annuityMV * 12 * remainYrs;
-  const totalCov   = lumpVal + annuityEq;
-
-  if (totalCov <= 0) {
-    summaryDiv.style.display = 'none';
-    return;
+  function resultScreen() {
+    const r = lastResult;
+    const m = r.metrics;
+    const status = m.firstTotalShortfallAge != null ? `${m.firstTotalShortfallAge}歳` : m.firstLiquidShortfallAge != null ? `${m.firstLiquidShortfallAge}歳` : 'なし';
+    const statusSub = m.firstTotalShortfallAge != null ? '資金不足が発生' : m.firstLiquidShortfallAge != null ? '流動資産が枯渇' : `${r.assumptions.horizonAge}歳まで`;
+    return `<section class="results-header"><div class="container">
+      <div class="header-inner" style="height:auto"><div class="brand"><img src="assets/compass-logo.png" alt=""><span>COMPASS PLAN <small>light</small></span></div><div class="header-actions"><button class="btn btn-light btn-small" data-action="edit">入力を修正</button><button class="btn btn-primary btn-small" data-action="print">印刷・PDF</button></div></div>
+      <div class="results-title"><div><div class="brand-kicker">YOUR FINANCIAL ROUTE</div><h1>将来のお金の見通し</h1><p>資産残高だけでなく、使えるお金・退職資産・累積不足額を分けて確認します。</p></div></div>
+    </div></section>
+    <main class="results-main"><div class="container">
+      <div class="metric-grid">
+        ${metric('現在の年間収支',signedWan(r.current.annualBalance),'積立を含む概算')}
+        ${metric('資金不足の開始',status,statusSub)}
+        ${metric(`${state.income.self.retireAge}歳時の金融資産`,formatWan(m.retirementAssets),'住宅資産価値は含まない')}
+        ${metric(`${r.assumptions.horizonAge}歳時の金融資産`,formatWan(m.finalAssets),m.cumulativeShortfall>0?`累積不足 ${formatWan(m.cumulativeShortfall)}`:'累積不足なし')}
+      </div>
+      <div class="result-layout"><div class="result-stack">
+        <section class="result-panel"><h2>金融資産の推移</h2><div class="chart-wrap"><canvas id="asset-chart"></canvas></div><div class="legend"><span><i style="background:#0a3474"></i>総金融資産</span><span><i style="background:#3788f6"></i>流動資産</span><span><i style="background:#8aa0bb"></i>DC・iDeCo等</span><span><i style="background:#ae2f38"></i>累積不足額</span></div></section>
+        <section class="result-panel"><h2>年間収支の推移</h2><div class="chart-wrap" style="height:300px"><canvas id="balance-chart"></canvas></div><div class="legend"><span><i style="background:#157f5b"></i>黒字</span><span><i style="background:#ae2f38"></i>赤字</span></div></section>
+        <section class="result-panel"><div class="table-tools"><h2 style="margin:0">年次キャッシュフロー</h2><label class="choice"><input type="checkbox" id="show-all-rows"> 全年表示</label></div><div class="table-scroll" id="cf-table"></div><div class="source-note">金額単位：万円。現在年齢の行は資産スナップショットで、年間収支は翌年齢の行から反映します。</div></section>
+      </div><aside class="result-stack">
+        <section class="result-panel"><h2>確認ポイント</h2><div class="alert-list">${alertsHtml(r)}</div></section>
+        <section class="result-panel"><h2>計算前提</h2><div class="assumption-list">
+          <div>物価上昇率：<strong>${r.assumptions.inflationRatePct}%</strong></div>
+          <div>運用利回り：<strong>${r.assumptions.investReturnPct}%</strong> ／ DC等：<strong>${r.assumptions.retirementReturnPct}%</strong></div>
+          <div>${esc(r.assumptions.timing)}</div><div>${esc(r.assumptions.assetScope)}</div><div>${esc(r.assumptions.taxScope)}</div>
+          ${m.housingBurdenPct!=null?`<div>購入年の住居費負担：<strong>${formatPct(m.housingBurdenPct)}</strong></div>`:''}
+          ${m.mortgageTotalInterest?`<div>住宅ローン利息総額：<strong>${formatWan(m.mortgageTotalInterest)}</strong></div>`:''}
+        </div></section>
+        <section class="result-panel"><h2>資料の基準</h2><div class="small muted">教育費は文部科学省「令和5年度 子供の学習費調査」訂正後資料、大学等はJASSO「令和4年度 学生生活調査」を参考にした概算です。年金の繰上げは原則月0.4%、繰下げは月0.7%で調整しています。</div></section>
+        <button class="btn btn-outline btn-wide no-print" data-action="edit">← 入力を修正する</button>
+      </aside></div>
+    </div></main>`;
   }
 
-  summaryDiv.style.display = '';
-  let html = `現在の死亡保障総額（試算）：<strong>${totalCov.toLocaleString('ja-JP')} 万円</strong>`;
-  if (annuityEq > 0) {
-    html += `<br><span style="font-size:0.78rem;color:var(--color-text-mute);">年金型換算：${annuityMV}万円/月 × 12 × ${remainYrs}年 ＝ ${annuityEq.toLocaleString('ja-JP')}万円</span>`;
+  function metric(name,value,sub){ return `<div class="metric"><div class="name">${name}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`; }
+  function signedWan(v){ const x=n(v); return `${x>=0?'+':'−'}${formatWan(Math.abs(x))}`; }
+  function alertsHtml(r){
+    if (!r.warnings.length) return `<div class="alert good"><strong>大きな資金不足は見つかりませんでした</strong><p>前提を変えた場合の影響も比較し、余裕資金の使い方を検討してください。</p></div>`;
+    return r.warnings.map(w=>`<div class="alert ${w.level}"><strong>${esc(w.title)}</strong><p>${esc(w.detail)}</p></div>`).join('');
   }
-  textDiv.innerHTML = html;
-}
 
-/**
- * 保険料負担率の表示を更新
- */
-function updateInsurancePremiumRatio() {
-  const ratioDiv = document.getElementById('ins-premium-ratio');
-  if (!ratioDiv) return;
-
-  const mpVal = parseFloat(document.getElementById('ins-monthly-premium')?.value || 0);
-  if (!mpVal) { ratioDiv.style.display = 'none'; return; }
-
-  // 世帯手取りを formData から取得
-  const i1 = formData.income1 || {};
-  const i2 = formData.income2 || {};
-  const hasSpouse = formData.family?.hasSpouse === 'yes';
-  const estNet = (gross) => {
-    if (!gross || gross <= 0) return 0;
-    if (gross <= 150) return gross * 0.87;
-    if (gross <= 250) return gross * 0.84;
-    if (gross <= 400) return gross * 0.80;
-    if (gross <= 600) return gross * 0.77;
-    if (gross <= 800) return gross * 0.74;
-    if (gross <= 1000) return gross * 0.72;
-    return gross * 0.70;
-  };
-  const selfNet   = parseFloat(i1.netIncome || 0) || estNet(parseFloat(i1.grossIncome || 0));
-  const spouseNet = hasSpouse ? (parseFloat(i2.netIncome || 0) || estNet(parseFloat(i2.grossIncome || 0))) : 0;
-  const totalNetY = selfNet + spouseNet; // 万円/年
-
-  const annualFromMonthly = mpVal / 10000 * 12; // 円/月 → 万円/年
-  if (totalNetY <= 0) { ratioDiv.style.display = 'none'; return; }
-
-  const ratio = (annualFromMonthly / totalNetY * 100).toFixed(1);
-  ratioDiv.style.display = '';
-  ratioDiv.textContent = `世帯手取りに対する保険料負担率：約 ${ratio}%（年間 ${Math.round(annualFromMonthly * 10) / 10} 万円）`;
-}
-
-// =========================================================
-// 生活費逆算パネル - イベントハンドラ
-// =========================================================
-
-/**
- * 生活費逆算パネルのイベントを設定する
- */
-function attachLivingReverseEvents() {
-  const container = document.getElementById('step-content');
-  if (!container) return;
-
-  // 逆算用入力フィールドの変更 → 逆算結果を更新 → formData保存
-  ['lc-edu-annual', 'lc-other-annual', 'lc-extra-saving'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.addEventListener('input', () => {
-        collectCurrentStep();
-        updateLivingReverse();
-        Storage.save(formData);
+  function render() {
+    app.innerHTML = screen === 'landing' ? landing() : screen === 'editor' ? editor() : resultScreen();
+    bindEvents();
+    if (screen === 'results') {
+      requestAnimationFrame(() => {
+        drawAssetChart(document.getElementById('asset-chart'), lastResult.rows);
+        drawBalanceChart(document.getElementById('balance-chart'), lastResult.rows.filter(r=>!r.isSnapshot));
+        renderTable(false);
       });
     }
-  });
-
-  // 「生活費を自分で修正する」トグルボタン
-  const toggleBtn   = document.getElementById('btn-manual-toggle');
-  const manualBlock = document.getElementById('lc-manual-block');
-  const flagEl      = document.getElementById('lc-manual-flag'); // 常時1つだけ存在
-
-  if (toggleBtn && manualBlock) {
-    toggleBtn.addEventListener('click', () => {
-      const isOpen = manualBlock.style.display !== 'none';
-
-      if (isOpen) {
-        // ===== 手動モードを閉じる =====
-        manualBlock.style.display = 'none';
-        toggleBtn.innerHTML = '<i class="fa-solid fa-pen"></i> 生活費を自分で修正する';
-
-        // フラグを 'no' に
-        if (flagEl) flagEl.value = 'no';
-
-        // 手動入力欄の data-save-key を外す（collectCurrentStep で拾われないよう）
-        const manualInput = manualBlock.querySelector('input#liv-expense');
-        if (manualInput) manualInput.removeAttribute('data-save-key');
-
-        // 自動計算値保持用 hidden input を追加（まだなければ）
-        let autoHidden = container.querySelector('input#liv-expense-auto');
-        if (!autoHidden) {
-          autoHidden = document.createElement('input');
-          autoHidden.type = 'hidden';
-          autoHidden.id   = 'liv-expense-auto';
-          autoHidden.setAttribute('data-save-key', 'living.annualExpense');
-          manualBlock.parentNode.insertBefore(autoHidden, manualBlock);
-        } else {
-          autoHidden.setAttribute('data-save-key', 'living.annualExpense');
-        }
-        const rev = calcLivingReverse();
-        autoHidden.value = rev >= 0 ? Math.round(rev) : '';
-
-      } else {
-        // ===== 手動モードを開く =====
-        manualBlock.style.display = 'block';
-        toggleBtn.innerHTML = '<i class="fa-solid fa-chevron-up"></i> 閉じる';
-
-        // フラグを 'yes' に
-        if (flagEl) flagEl.value = 'yes';
-
-        // 自動計算値保持 hidden input の data-save-key を外す（手動入力欄を優先）
-        const autoHidden = container.querySelector('input#liv-expense-auto');
-        if (autoHidden) autoHidden.removeAttribute('data-save-key');
-
-        // 手動入力欄に data-save-key を再付与
-        const manualInput = manualBlock.querySelector('input#liv-expense');
-        if (manualInput) manualInput.setAttribute('data-save-key', 'living.annualExpense');
-      }
-
-      collectCurrentStep();
-      Storage.save(formData);
-      updateLivingReverse();
-    });
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }
 
-  // 手動入力欄の変更 → formData保存
-  const manualInput = manualBlock ? manualBlock.querySelector('input#liv-expense') : null;
-  if (manualInput) {
-    manualInput.addEventListener('input', () => {
-      collectCurrentStep();
-      Storage.save(formData);
+  function bindEvents() {
+    app.querySelectorAll('[data-path]').forEach((el) => {
+      el.addEventListener('change', onFieldChange);
+      if (el.tagName === 'INPUT' && !['checkbox','radio'].includes(el.type)) el.addEventListener('input', onFieldChange);
     });
+    app.querySelectorAll('[data-action]').forEach((el) => el.addEventListener('click', onAction));
+    const allRows = document.getElementById('show-all-rows');
+    if (allRows) allRows.addEventListener('change', () => renderTable(allRows.checked));
+    window.addEventListener('resize', redrawCharts, { once: true });
   }
-}
 
-/**
- * 逆算値を数値で返す（マイナスもそのまま返す）
- */
-function calcLivingReverse() {
-  // formData から最新値を取得
-  const i1  = formData.income1   || {};
-  const i2  = formData.income2   || {};
-  const as  = formData.assets    || {};
-  const hw  = formData.housing   || {};
-  const ins = formData.insurance || {};
-  const lv  = formData.living    || {};
-  const hasSpouse = formData.family?.hasSpouse === 'yes';
+  function onFieldChange(e) {
+    const el = e.currentTarget;
+    const path = el.dataset.path;
+    let value;
+    if (el.type === 'checkbox') value = el.checked;
+    else if (el.type === 'radio') {
+      if (!el.checked) return;
+      value = el.value === 'yes' ? true : el.value === 'no' ? false : el.value;
+    } else if (el.type === 'number') value = el.value === '' ? '' : Number(el.value);
+    else if (el.tagName === 'SELECT' && (el.value === 'yes' || el.value === 'no')) value = el.value === 'yes';
+    else value = el.value;
+    setPath(state, path, value);
+    saveState();
+    if (['family.hasSpouse','housing.purchasePlan'].includes(path) || path.includes('.timing')) render();
+  }
 
-  const estNet = (gross) => {
-    if (!gross || gross <= 0) return 0;
-    if (gross <= 150)  return gross * 0.87;
-    if (gross <= 250)  return gross * 0.84;
-    if (gross <= 400)  return gross * 0.80;
-    if (gross <= 600)  return gross * 0.77;
-    if (gross <= 800)  return gross * 0.74;
-    if (gross <= 1000) return gross * 0.72;
-    return gross * 0.70;
-  };
+  function onAction(e) {
+    const btn = e.currentTarget;
+    const action = btn.dataset.action;
+    if (action === 'new') { state=E.defaultData(); saveState(); currentStep=0; screen='editor'; render(); }
+    else if (action === 'resume') { state=loadState()||E.defaultData(); currentStep=0; screen='editor'; render(); }
+    else if (action === 'sample') { state=sampleData(); saveState(); lastResult=E.project(state); screen='results'; render(); }
+    else if (action === 'landing') { screen='landing'; render(); }
+    else if (action === 'back') { if(currentStep>0){currentStep--;render();} }
+    else if (action === 'next') { if(validateCurrent()){currentStep=Math.min(STEPS.length-1,currentStep+1);saveState();render();} }
+    else if (action === 'goto') { currentStep=Number(btn.dataset.step); render(); }
+    else if (action === 'calculate') { if(validateAll()){saveState();lastResult=E.project(state);screen='results';render();} }
+    else if (action === 'edit') { screen='editor'; currentStep=0; render(); }
+    else if (action === 'print') window.print();
+    else if (action === 'reset') { if(confirm('入力内容をすべてリセットしますか？')){clearState();currentStep=0;screen='editor';render();} }
+    else if (action === 'add-child') { state.family.children=state.family.children||[]; state.family.children.push({label:`第${state.family.children.length+1}子`,timing:'existing',age:0,yearsUntilBirth:1,currentEducation:0,finalEdu:'university',route:'public',away:false});saveState();render(); }
+    else if (action === 'remove-child') { state.family.children.splice(Number(btn.dataset.index),1);saveState();render(); }
+    else if (action === 'add-income-change') { const p=state.income[btn.dataset.person];p.changes=p.changes||[];p.changes.push({age:(btn.dataset.person==='self'?n(state.family.selfAge):n(state.family.spouseAge))+10,gross:p.gross});saveState();render(); }
+    else if (action === 'remove-income-change') { state.income[btn.dataset.person].changes.splice(Number(btn.dataset.index),1);saveState();render(); }
+    else if (action === 'add-event') { state.events=state.events||[];state.events.push({label:'',ageSelf:n(state.family.selfAge)+5,kind:'expense',amount:0,inflate:false});saveState();render(); }
+    else if (action === 'remove-event') { state.events.splice(Number(btn.dataset.index),1);saveState();render(); }
+    else if (action === 'save-json') downloadJson();
+  }
 
-  const selfNet   = parseFloat(i1.netIncome || 0) || estNet(parseFloat(i1.grossIncome || 0));
-  const spouseNet = hasSpouse
-    ? (parseFloat(i2.netIncome || 0) || estNet(parseFloat(i2.grossIncome || 0)))
-    : 0;
-  const totalNet  = selfNet + spouseNet;
-
-  const housingY  = parseFloat(hw.monthlyCost   || 0) * 12;
-  const insY      = ins.monthlyPremium
-    ? parseFloat(ins.monthlyPremium) / 10000 * 12
-    : parseFloat(ins.annualPremium || 0);
-  const savingY   = (parseFloat(as.monthlySaving || 0) + parseFloat(as.dcMonthly || 0)) * 12;
-  const eduY      = parseFloat(lv.currentEduAnnual || 0);
-  const otherY    = parseFloat(lv.otherAnnual       || 0);
-  const extraSavY = parseFloat(lv.extraSaving        || 0);
-
-  return totalNet - housingY - insY - savingY - eduY - otherY - extraSavY;
-}
-
-/**
- * 逆算結果の表示を更新する（リアルタイム更新）
- */
-function updateLivingReverse() {
-  const resultArea = document.getElementById('lc-result-area');
-  if (!resultArea) return;
-
-  const calcExpense = calcLivingReverse();
-  const calcMonthly = calcExpense / 12;
-  const isNegative  = calcExpense < 0;
-
-  // 自動計算値保持 hidden input を更新（手動モードでない場合）
-  const isManual = formData.living?.manualExpense === 'yes';
-  if (!isManual) {
-    const autoHidden = document.getElementById('liv-expense-auto');
-    if (autoHidden) {
-      autoHidden.value = isNegative ? '' : Math.round(calcExpense);
-      setNestedValue(formData, 'living.annualExpense', autoHidden.value);
+  function validateCurrent(){
+    const errors=[];
+    if(currentStep===0){
+      if(n(state.family.selfAge)<18) errors.push('本人の年齢を入力してください。');
+      if(bool(state.family.hasSpouse)&&n(state.family.spouseAge)<18) errors.push('配偶者の年齢を入力してください。');
+      (state.family.children||[]).forEach((c,i)=>{if(c.timing==='planned'&&n(c.yearsUntilBirth)<1)errors.push(`第${i+1}子の誕生予定を入力してください。`);});
     }
+    if(currentStep===1){
+      if(n(state.income.self.retireAge)<=n(state.family.selfAge))errors.push('本人の就業終了年齢は現在年齢より後にしてください。');
+      if(bool(state.family.hasSpouse)&&n(state.income.spouse.retireAge)<=n(state.family.spouseAge))errors.push('配偶者の就業終了年齢は現在年齢より後にしてください。');
+    }
+    if(currentStep===4&&bool(state.housing.purchasePlan)){
+      if(n(state.housing.price)<=0)errors.push('住宅の物件価格を入力してください。');
+      if(n(state.housing.buyAge)<=n(state.family.selfAge))errors.push('購入年齢は現在年齢より後にしてください。');
+      if(n(state.housing.downPayment)>n(state.housing.price))errors.push('頭金が物件価格を超えています。');
+    }
+    return showErrors(errors);
   }
 
-  if (isNegative) {
-    resultArea.innerHTML = `
-      <div class="alert alert-danger lc-warn-negative">
-        <i class="fa-solid fa-triangle-exclamation"></i>
-        <div>
-          <strong>入力された支出・貯蓄額が手取り収入を上回っています。</strong><br>
-          入力内容をご確認ください。（差額：${Math.abs(Math.round(calcExpense)).toLocaleString('ja-JP')} 万円）
-        </div>
-      </div>`;
-  } else {
-    resultArea.innerHTML = `
-      <div class="lc-result-card">
-        <div class="lc-result-title">
-          <i class="fa-solid fa-house-chimney"></i> 現在の生活費（推定）
-        </div>
-        <div class="lc-result-grid">
-          <div class="lc-result-item">
-            <span class="lc-result-label">推定年間生活費</span>
-            <span class="lc-result-val" id="lc-annual-result">${Math.round(calcExpense).toLocaleString('ja-JP')} 万円</span>
-          </div>
-          <div class="lc-result-item">
-            <span class="lc-result-label">推定月平均生活費</span>
-            <span class="lc-result-val" id="lc-monthly-result">${(Math.round(calcMonthly * 10) / 10).toLocaleString('ja-JP')} 万円</span>
-          </div>
-        </div>
-        <p class="lc-result-note">年収と、住宅費・教育費・保険料・貯蓄額・臨時支出から現在の生活費を逆算しています。</p>
-      </div>`;
+  function validateAll(){
+    for(let i=0;i<STEPS.length-1;i++){const prev=currentStep;currentStep=i;if(!validateCurrent()){currentStep=prev;return false;}currentStep=prev;}
+    return true;
   }
-}
 
-// =========================================================
-// アプリケーション起動
-// =========================================================
-function init() {
-  initTopScreen();
-  initEvents();
-  showScreen('top');
-}
+  function showErrors(errors){
+    const box=document.getElementById('form-error');
+    if(!errors.length){if(box)box.classList.add('hidden');return true;}
+    if(box){box.innerHTML=`<strong>入力内容を確認してください</strong><br>${errors.map(esc).join('<br>')}`;box.classList.remove('hidden');box.scrollIntoView({behavior:'smooth',block:'center'});}
+    return false;
+  }
 
-document.addEventListener('DOMContentLoaded', init);
+  function sampleData(){
+    const d=E.defaultData();
+    d.family.selfAge=38;d.family.spouseAge=35;d.family.children=[
+      {label:'第1子',timing:'existing',age:5,currentEducation:18,finalEdu:'university',route:'highPrivate',away:false},
+      {label:'第2子',timing:'planned',yearsUntilBirth:2,currentEducation:0,finalEdu:'university',route:'public',away:true}
+    ];
+    d.income.self.gross=700;d.income.self.net=530;d.income.self.growthRate=1;d.income.self.growthUntilAge=50;d.income.self.changes=[{age:55,gross:650},{age:60,gross:420}];d.income.self.retireAge=65;d.income.self.pensionMonthly65=16;d.income.self.severance=1500;
+    d.income.spouse.gross=450;d.income.spouse.net=350;d.income.spouse.growthRate=1;d.income.spouse.growthUntilAge=48;d.income.spouse.changes=[{age:45,gross:520}];d.income.spouse.retireAge=65;d.income.spouse.pensionMonthly65=11;d.income.spouse.severance=700;
+    d.living.baseAnnual=360;d.living.otherAnnual=50;d.meta.inflationRate=1.5;
+    d.assets.cash=800;d.assets.investment=450;d.assets.retirement=250;d.assets.monthlyInvestment=10;d.assets.monthlyRetirement=3;d.assets.investReturn=3;d.assets.retirementReturn=3;
+    d.housing.monthlyCost=13;d.housing.purchasePlan=true;d.housing.buyAge=42;d.housing.price=5200;d.housing.downPayment=700;d.housing.miscRate=7;d.housing.loanTerm=35;d.housing.interestRate=1.2;d.housing.annualMaintenance=38;
+    d.insurance.annualPremium=36;d.insurance.premiumEndAge=60;d.events=[{label:'車の買い替え',ageSelf:48,kind:'expense',amount:350,inflate:true},{label:'住宅リフォーム',ageSelf:68,kind:'expense',amount:600,inflate:true}];
+    return d;
+  }
+
+  function downloadJson(){
+    const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='compass-plan-light-data.json';a.click();URL.revokeObjectURL(a.href);
+  }
+
+  function renderTable(showAll){
+    const holder=document.getElementById('cf-table');if(!holder)return;
+    const eventAges=new Set(lastResult.events.map(e=>e.age));
+    const rows=lastResult.rows.filter((r,i)=>showAll||r.isSnapshot||i===lastResult.rows.length-1||r.selfAge%5===0||eventAges.has(r.selfAge)||r.annualShortfall>0);
+    holder.innerHTML=`<table><thead><tr><th>年齢</th><th>収入</th><th>支出</th><th>積立</th><th>年間収支</th><th>現預金</th><th>運用資産</th><th>DC等</th><th>総金融資産</th><th>不足累計</th><th>ローン残高</th></tr></thead><tbody>${rows.map(r=>{
+      const ev=eventAges.has(r.selfAge);return `<tr class="${r.annualBalance<0?'negative':''} ${ev?'event-row':''}"><td>${r.selfAge}歳${r.isSnapshot?'（現在）':''}</td><td>${r.isSnapshot?'—':numCell(r.income)}</td><td>${r.isSnapshot?'—':numCell(r.expense)}</td><td>${r.isSnapshot?'—':numCell(r.investmentContribution+r.retirementContribution)}</td><td>${r.isSnapshot?'—':numCell(r.annualBalance)}</td><td>${numCell(r.cash)}</td><td>${numCell(r.investment)}</td><td>${numCell(r.retirement)}</td><td>${numCell(r.totalFinancialAssets)}</td><td>${numCell(r.cumulativeShortfall)}</td><td>${numCell(r.mortgageBalance)}</td></tr>`;}).join('')}</tbody></table>`;
+  }
+
+  function numCell(v){return n(v).toLocaleString('ja-JP',{maximumFractionDigits:0});}
+
+  function redrawCharts(){if(screen==='results'&&lastResult){drawAssetChart(document.getElementById('asset-chart'),lastResult.rows);drawBalanceChart(document.getElementById('balance-chart'),lastResult.rows.filter(r=>!r.isSnapshot));}}
+
+  function canvasSetup(canvas){
+    if(!canvas)return null;const rect=canvas.getBoundingClientRect();const dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=Math.max(300,rect.width*dpr);canvas.height=Math.max(200,rect.height*dpr);const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);return {ctx,w:rect.width,h:rect.height};
+  }
+
+  function drawAssetChart(canvas,rows){
+    const setup=canvasSetup(canvas);if(!setup)return;const {ctx,w,h}=setup;const pad={l:55,r:18,t:18,b:38};const pw=w-pad.l-pad.r,ph=h-pad.t-pad.b;
+    const series=[['totalFinancialAssets','#0a3474'],['liquidAssets','#3788f6'],['retirement','#8aa0bb'],['cumulativeShortfall','#ae2f38']];
+    const max=Math.max(100,...rows.flatMap(r=>series.map(([k])=>n(r[k]))));const min=0;
+    ctx.clearRect(0,0,w,h);ctx.font='11px sans-serif';ctx.fillStyle='#708096';ctx.strokeStyle='#e1e8f0';ctx.lineWidth=1;
+    for(let i=0;i<=5;i++){const y=pad.t+ph*i/5;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();const val=max*(1-i/5);ctx.textAlign='right';ctx.fillText(Math.round(val).toLocaleString(),pad.l-8,y+4);}
+    const x=i=>pad.l+(rows.length===1?0:i/(rows.length-1))*pw;const y=v=>pad.t+ph-(v-min)/(max-min)*ph;
+    series.forEach(([key,color])=>{ctx.beginPath();rows.forEach((r,i)=>{const xx=x(i),yy=y(n(r[key]));i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);});ctx.strokeStyle=color;ctx.lineWidth=key==='totalFinancialAssets'?3:2;ctx.stroke();});
+    labelXAxis(ctx,rows,x,h,pad);
+  }
+
+  function drawBalanceChart(canvas,rows){
+    const setup=canvasSetup(canvas);if(!setup)return;const {ctx,w,h}=setup;const pad={l:55,r:18,t:18,b:38};const pw=w-pad.l-pad.r,ph=h-pad.t-pad.b;
+    const vals=rows.map(r=>n(r.annualBalance));const max=Math.max(100,...vals.map(Math.abs));ctx.clearRect(0,0,w,h);ctx.font='11px sans-serif';ctx.fillStyle='#708096';ctx.strokeStyle='#e1e8f0';
+    const y=v=>pad.t+ph/2-(v/max)*(ph/2*.9);const zero=y(0);for(let i=0;i<=4;i++){const val=max-(max*2*i/4);const yy=y(val);ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.textAlign='right';ctx.fillText(Math.round(val).toLocaleString(),pad.l-8,yy+4);}
+    const bw=Math.max(1,pw/rows.length*.7);rows.forEach((r,i)=>{const x=pad.l+(i+.5)/rows.length*pw;const yy=y(r.annualBalance);ctx.fillStyle=r.annualBalance>=0?'#157f5b':'#ae2f38';ctx.fillRect(x-bw/2,Math.min(zero,yy),bw,Math.abs(zero-yy));});
+    labelXAxis(ctx,rows,i=>pad.l+(i+.5)/rows.length*pw,h,pad);
+  }
+
+  function labelXAxis(ctx,rows,x,h,pad){
+    ctx.fillStyle='#708096';ctx.textAlign='center';const labels=[];rows.forEach((r,i)=>{if(i===0||i===rows.length-1||r.selfAge%10===0)labels.push([i,r.selfAge]);});labels.forEach(([i,a])=>ctx.fillText(`${a}歳`,x(i),h-12));
+  }
+
+  render();
+})();

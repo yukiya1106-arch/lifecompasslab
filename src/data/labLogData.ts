@@ -9,6 +9,15 @@ export type LabLog = {
 
 export const labLogs: LabLog[] = [
   {
+    date: "2026.07.18",
+    title: "COMPASS PLAN LIGHTへ名称変更",
+    summary: "家計コンパスをマイナーチェンジして名前を「COMPASS PLAN LIGHT」に変更しました。",
+    body:
+      "家計コンパスをマイナーチェンジして名前を「COMPASS PLAN LIGHT」に変更しました。",
+    linkLabel: "COMPASS PLAN LIGHTを開く",
+    linkUrl: "/lifecompasslab/tools/kakei-compass-mini/",
+  },
+  {
     date: "2026.07.14",
     title: "家計コンパスminiの計算ロジックを修正",
     summary: "家計コンパスminiの計算ロジックを修正しました。",

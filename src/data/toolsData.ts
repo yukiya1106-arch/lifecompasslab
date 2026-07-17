@@ -65,12 +65,12 @@ export const tools: Tool[] = [
     featured: false,
   },
   {
-    title: "家計コンパスmini",
-    category: "ライフプラン / 家計管理",
-    categories: ["ライフプラン", "家計管理"],
+    title: "COMPASS PLAN LIGHT",
+    category: "ライフプラン / 家計管理 / 教育費 / 住宅購入",
+    categories: ["ライフプラン", "家計管理", "教育費", "住宅購入", "資産形成", "保険"],
     status: "公開中",
     description:
-      "誰でも直感的に入力できる、簡易的なライフプラン診断ツールです。家族構成、収入、資産、住まい、保険、生活費などを入力し、家計の現在地や将来のお金の流れをざっくり確認できます。",
+      "住宅、教育、働き方、資産形成などの選択が、将来の年次キャッシュフローと金融資産にどう影響するかを確認できるライト版ライフプランシミュレーターです。",
     url: "/lifecompasslab/tools/kakei-compass-mini/",
     buttonLabel: "試してみる",
     icon: "chart",
