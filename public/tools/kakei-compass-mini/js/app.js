@@ -18,6 +18,7 @@
   let currentStep = 0;
   let screen = 'landing';
   let lastResult = null;
+  let resizeBound = false;
 
   function deepMerge(base, extra) {
     if (Array.isArray(extra)) return extra;
@@ -31,11 +32,31 @@
     return out;
   }
 
+  function migrateState(raw) {
+    if (!raw || typeof raw !== 'object') return raw;
+    const copy = JSON.parse(JSON.stringify(raw));
+    copy.living = copy.living || {};
+    if ((copy.living.baseMonthly === undefined || copy.living.baseMonthly === '') && copy.living.baseAnnual !== undefined) {
+      copy.living.baseMonthly = n(copy.living.baseAnnual) / 12;
+    }
+    delete copy.living.baseAnnual;
+    copy.assets = copy.assets || {};
+    const currentAge = n(copy.family && copy.family.selfAge, 35);
+    if (copy.assets.investmentStartAge == null || copy.assets.investmentStartAge === '') copy.assets.investmentStartAge = currentAge;
+    if (copy.assets.withdrawalStartAge == null || copy.assets.withdrawalStartAge === '') copy.assets.withdrawalStartAge = Math.max(n(copy.assets.investmentEndAge, 60) + 1, n(copy.income && copy.income.self && copy.income.self.retireAge, 65));
+    if (!['lump','equal','annuity'].includes(copy.assets.withdrawalMethod)) copy.assets.withdrawalMethod = 'annuity';
+    if (!copy.assets.withdrawalYears) copy.assets.withdrawalYears = 20;
+    copy.assets.autoEmergencyWithdrawal = true;
+    copy.meta = copy.meta || {};
+    copy.meta.version = E.VERSION;
+    return copy;
+  }
+
   function loadState() {
     try {
       const raw = safeStorage.get(STORAGE_KEY);
       if (!raw) return null;
-      return deepMerge(E.defaultData(), JSON.parse(raw));
+      return deepMerge(E.defaultData(), migrateState(JSON.parse(raw)));
     } catch (_) { return null; }
   }
 
@@ -58,10 +79,6 @@
   function n(value, fallback = 0) {
     const x = Number(value);
     return Number.isFinite(x) ? x : fallback;
-  }
-
-  function getPath(obj, path) {
-    return path.split('.').reduce((v, key) => v == null ? undefined : v[key], obj);
   }
 
   function setPath(obj, path, value) {
@@ -102,6 +119,13 @@
       <div class="field"><input id="${esc(path)}" type="${type}" data-path="${esc(path)}" value="${esc(value)}" ${min} ${max} ${step} ${placeholder}>${unit ? `<span class="unit">${unit}</span>` : ''}</div>
       ${opts.hint ? `<div class="hint">${opts.hint}</div>` : ''}
     </div>`;
+  }
+
+  function inlineField(path, value, unit, opts = {}) {
+    const min = opts.min != null ? `min="${opts.min}"` : '';
+    const max = opts.max != null ? `max="${opts.max}"` : '';
+    const step = opts.step != null ? `step="${opts.step}"` : '';
+    return `<span class="inline-field"><input aria-label="${esc(opts.label || path)}" type="number" data-path="${esc(path)}" value="${esc(value)}" ${min} ${max} ${step}><span>${esc(unit)}</span></span>`;
   }
 
   function selectField(path, label, value, options, opts = {}) {
@@ -191,33 +215,54 @@
     </div>`;
   }
 
+  function incomeSummaryHtml(key, baseAge) {
+    const p = E.normalizePerson(state.income[key], baseAge);
+    const ages = [baseAge, p.growthUntilAge, ...p.changes.map(c=>c.age), Math.max(baseAge, p.retireAge - 1)];
+    const unique = [...new Set(ages.filter(a=>a>=baseAge && a<p.retireAge))].sort((a,b)=>a-b).slice(0,7);
+    return unique.map(age=>`<span><b>${age}歳</b>${formatWan(E.grossAtAge(p,baseAge,age))}</span>`).join('');
+  }
+
   function personSection(key, title, baseAge) {
     const p = state.income[key];
-    const changes = Array.isArray(p.changes) ? p.changes : [];
-    return `<section class="section"><h3>${title}</h3><div class="form-grid three">
-      ${field(`income.${key}.gross`,'現在の額面年収',p.gross,'万円',{min:0,max:10000})}
-      ${field(`income.${key}.net`,'現在の手取り年収',p.net,'万円',{min:0,max:10000,optional:true,hint:'未入力の場合は連続性のある概算式で推計します。'})}
-      ${field(`income.${key}.otherAnnual`,'その他の年収',p.otherAnnual||0,'万円/年',{min:0,max:10000,optional:true})}
-      ${field(`income.${key}.otherIncomeEndAge`,'その他収入の終了年齢',p.otherIncomeEndAge||p.retireAge||65,'歳',{min:baseAge,max:110,optional:true,hint:'家賃収入など退職後も続く場合は終了年齢を延ばしてください。'})}
-      ${field(`income.${key}.growthRate`,'毎年の上昇率',p.growthRate||0,'%/年',{min:-20,max:20,step:.1})}
-      ${field(`income.${key}.growthUntilAge`,'上昇を続ける年齢',p.growthUntilAge||baseAge,'歳まで',{min:baseAge,max:85,hint:'この年齢以降は、次の変更点まで横ばいです。'})}
-      ${field(`income.${key}.retireAge`,'就業終了年齢',p.retireAge||65,'歳',{min:baseAge+1,max:85})}
-      ${field(`income.${key}.pensionStartAge`,'年金受給開始',p.pensionStartAge||65,'歳',{min:60,max:75})}
-      ${field(`income.${key}.pensionMonthly65`,'65歳基準の年金月額',p.pensionMonthly65||0,'万円/月',{min:0,max:100,step:.1,optional:true})}
-      ${field(`income.${key}.severance`,'退職金',p.severance||0,'万円',{min:0,max:50000,optional:true,hint:'税引前の概算。税金は本ライト版では未反映です。'})}
-    </div>
-    <div style="margin-top:18px"><div class="label">年齢ごとの収入変更</div><div class="hint" style="margin-bottom:10px">例：55歳から年収600万円、60歳から年収350万円。変更後も、上の上昇率が「上昇を続ける年齢」まで適用されます。</div>
-      <div class="repeat-list">${changes.map((c,i)=>`<div class="repeat-card"><div class="form-grid three">
-        ${field(`income.${key}.changes.${i}.age`,'変更年齢',c.age,'歳',{min:baseAge,max:85})}
-        ${field(`income.${key}.changes.${i}.gross`,'その年齢からの額面年収',c.gross,'万円',{min:0,max:10000})}
-        <div class="form-group"><label>&nbsp;</label><button class="btn btn-danger btn-small" data-action="remove-income-change" data-person="${key}" data-index="${i}">この変更を削除</button></div>
-      </div></div>`).join('')}</div>
-      <button class="add-btn" data-action="add-income-change" data-person="${key}">＋ 収入変更点を追加</button>
-    </div></section>`;
+    p.changes = Array.isArray(p.changes) ? p.changes.sort((a,b)=>n(a.age)-n(b.age)) : [];
+    const changes = p.changes;
+    return `<section class="section person-section"><h3>${title}</h3>
+      <div class="subsection-card"><div class="subsection-head"><div><strong>現在の収入</strong><p>現在の額面と、分かる場合は実際の手取りを入力します。</p></div></div>
+        <div class="form-grid three">
+          ${field(`income.${key}.gross`,'現在の額面年収',p.gross,'万円',{min:0,max:10000})}
+          ${field(`income.${key}.net`,'現在の手取り年収',p.net,'万円',{min:0,max:10000,optional:true,hint:'未入力の場合は連続性のある概算式で推計します。'})}
+          ${field(`income.${key}.otherAnnual`,'その他の年収',p.otherAnnual||0,'万円/年',{min:0,max:10000,optional:true})}
+          ${field(`income.${key}.otherIncomeEndAge`,'その他収入の終了年齢',p.otherIncomeEndAge||p.retireAge||65,'歳',{min:baseAge,max:110,optional:true,hint:'家賃収入など退職後も続く場合は終了年齢を延ばしてください。'})}
+        </div>
+      </div>
+      <div class="income-curve-card">
+        <div class="subsection-head"><div><strong>基本の年収カーブ</strong><p>現在の年収を基準に、指定年齢まで毎年同じ率で変化させます。</p></div></div>
+        <div class="curve-sentence">現在の年収から、毎年 ${inlineField(`income.${key}.growthRate`,p.growthRate||0,'％',{min:-20,max:20,step:.1,label:'毎年の年収変化率'})} で ${inlineField(`income.${key}.growthUntilAge`,p.growthUntilAge||baseAge,'歳まで',{min:baseAge,max:85,label:'年収変化を続ける年齢'})} 変化</div>
+        <div class="income-preview"><canvas id="income-chart-${key}"></canvas></div>
+        <div class="income-summary" id="income-summary-${key}">${incomeSummaryHtml(key,baseAge)}</div>
+      </div>
+      <div class="subsection-card income-overrides">
+        <div class="subsection-head"><div><strong>年齢別の上書き</strong><p>役職定年・転職・再雇用など、特定の年齢から年収額を切り替えます。</p></div><span class="count-badge">${changes.length}件</span></div>
+        <div class="repeat-list">${changes.map((c,i)=>`<div class="income-change-row">
+          <div class="change-sentence">${inlineField(`income.${key}.changes.${i}.age`,c.age,'歳から',{min:baseAge+1,max:85,label:'変更年齢'})} 年収を ${inlineField(`income.${key}.changes.${i}.gross`,c.gross,'万円',{min:0,max:10000,label:'変更後の額面年収'})} に変更</div>
+          <button class="icon-btn" data-action="remove-income-change" data-person="${key}" data-index="${i}" title="削除">×</button>
+        </div>`).join('')}</div>
+        <button class="add-btn" data-action="add-income-change" data-person="${key}">＋ 年収の変更を追加</button>
+        <div class="hint">上書き年齢では指定額を優先し、その後は「基本の年収カーブ」の終了年齢まで同じ変化率を適用します。</div>
+      </div>
+      <div class="subsection-card"><div class="subsection-head"><div><strong>退職・年金</strong><p>就業終了後は給与を0円とし、設定した年齢から年金を計上します。</p></div></div>
+        <div class="form-grid three">
+          ${field(`income.${key}.retireAge`,'就業終了年齢',p.retireAge||65,'歳',{min:baseAge+1,max:85})}
+          ${field(`income.${key}.pensionStartAge`,'年金受給開始',p.pensionStartAge||65,'歳',{min:60,max:75})}
+          ${field(`income.${key}.pensionMonthly65`,'65歳基準の年金月額',p.pensionMonthly65||0,'万円/月',{min:0,max:100,step:.1,optional:true})}
+          ${field(`income.${key}.severance`,'退職金',p.severance||0,'万円',{min:0,max:50000,optional:true,hint:'税引前の概算。税金は本ライト版では未反映です。'})}
+        </div>
+      </div>
+    </section>`;
   }
 
   function incomeStep() {
-    return `<div class="page-head"><div class="eyebrow">Step 2</div><h2>働き方と収入の変化</h2><p>「毎年○％」だけでなく、役職定年・再雇用・転職などの年収変更を年齢ごとに設定できます。</p></div>
+    return `<div class="page-head"><div class="eyebrow">Step 2</div><h2>働き方と収入の変化</h2><p>基本カーブを決めてから、役職定年・転職・再雇用などを年齢別に上書きします。</p></div>
       ${personSection('self','本人の収入',n(state.family.selfAge,35))}
       ${bool(state.family.hasSpouse) ? personSection('spouse','配偶者の収入',n(state.family.spouseAge,33)) : ''}
       <div class="info-box"><strong>手取り推計：</strong>額面年収帯の境界で手取りが逆転しないよう、複数の基準点を線形補間しています。実際の税・社会保険は家族構成等で異なるため、手取り実額の入力を推奨します。</div>`;
@@ -225,36 +270,76 @@
 
   function livingStep() {
     const l = state.living, m = state.meta;
-    return `<div class="page-head"><div class="eyebrow">Step 3</div><h2>生活費と物価上昇</h2><p>住宅費・教育費・保険料・積立を除いた、現在の基本生活費を入力します。</p></div>
+    const monthly = n(l.baseMonthly,0);
+    return `<div class="page-head"><div class="eyebrow">Step 3</div><h2>生活費と物価上昇</h2><p>住宅費・教育費・保険料・積立を除いた、現在の基本生活費を月額で入力します。</p></div>
       <section class="section"><h3>現在の支出</h3><div class="form-grid">
-        ${field('living.baseAnnual','基本生活費',l.baseAnnual,'万円/年',{min:0,max:3000,hint:'食費・光熱費・通信費・日用品・小遣い等。現在いるお子さまの日常生活費を含めます。'})}
-        ${field('living.otherAnnual','その他の年間支出',l.otherAnnual||0,'万円/年',{min:0,max:3000,hint:'旅行、車検、冠婚葬祭など。'})}
+        ${field('living.baseMonthly','毎月の基本生活費',monthly,'万円/月',{min:0,max:300,step:.1,hint:'食費・光熱費・通信費・日用品・小遣い等。現在いるお子さまの日常生活費を含めます。'})}
+        ${field('living.otherAnnual','その他の年間支出',l.otherAnnual||0,'万円/年',{min:0,max:3000,hint:'旅行、車検、冠婚葬祭など、毎月の生活費に含めない支出。'})}
         ${field('meta.inflationRate','物価上昇率',m.inflationRate,'%/年',{min:-3,max:10,step:.1,hint:'基本生活費・教育費・住居維持費などに反映します。'})}
         ${field('meta.horizonAge','計算終了年齢',m.horizonAge||90,'歳',{min:n(state.family.selfAge,35)+1,max:110})}
         ${toggleField('living.inflateOther','その他の年間支出にも物価上昇を反映',l.inflateOther)}
         ${toggleField('living.childLivingAdjust','子どもの成長・独立による生活費変化を反映',l.childLivingAdjust,'現在いる子は現在との差分だけ、将来予定の子は誕生後の概算額を加算します。')}
-      </div></section>
+      </div>
+      <div class="conversion-strip"><span>月額</span><strong>${formatWan(monthly,1)}</strong><span>× 12か月 ＝ 年間</span><strong>${formatWan(monthly*12,1)}</strong></div></section>
       <section class="section"><h3>教育費の前提</h3><div class="info-box">幼稚園から高校までは文部科学省「令和5年度 子供の学習費調査（2026年訂正後）」の学習費総額を年額化。大学はJASSO調査を基に、国公立約60万円・私立約131万円、自宅外は年48万円を概算加算しています。実際の進学先や授業料支援制度は個別に異なります。</div></section>`;
+  }
+
+  function investmentPreviewMarkup() {
+    const p = E.investmentPlanPreview(state.assets, n(state.family.selfAge, 35));
+    const methodLabel = p.method === 'lump' ? '一括受取' : p.method === 'equal' ? '分割受取（運用なし）' : '分割受取（運用継続）';
+    return `<div class="mortgage-preview-grid investment-preview-grid">
+      <div><span>取崩し開始時の想定残高</span><strong>${formatWan(p.projectedBalance,1)}</strong></div>
+      <div><span>受取方法</span><strong>${methodLabel}</strong></div>
+      <div><span>想定年間受取額</span><strong>${formatWan(p.annualWithdrawal,1)}</strong></div>
+      <div><span>想定月額</span><strong>${formatWan(p.monthlyWithdrawal,2)}</strong></div>
+      <div><span>受取開始</span><strong>${p.withdrawalStartAge}歳</strong></div>
+      <div><span>想定終了</span><strong>${p.endAge}歳ごろ</strong></div>
+    </div><div class="source-note">現在残高・積立期間・想定利回りからの概算です。実際の運用成果は変動します。現預金が不足した場合は、設定時期より前でもNISA等から必要額だけ臨時に取り崩します。</div>`;
   }
 
   function assetsStep() {
     const a=state.assets;
-    return `<div class="page-head"><div class="eyebrow">Step 4</div><h2>現在の資産と積立</h2><p>現預金・いつでも使える運用資産・受取時期が限られる退職資産を分けて計算します。</p></div>
+    const currentAge=n(state.family.selfAge,35);
+    const split=a.withdrawalMethod!=='lump';
+    return `<div class="page-head"><div class="eyebrow">Step 4</div><h2>現在の資産と運用計画</h2><p>積み立てる期間だけでなく、いつ・どのように受け取るかまで設定します。</p></div>
       <section class="section"><h3>現在の残高</h3><div class="form-grid three">
         ${field('assets.cash','現預金',a.cash,'万円',{min:0,max:100000})}
         ${field('assets.investment','NISA等の運用資産',a.investment,'万円',{min:0,max:100000})}
         ${field('assets.retirement','DC・iDeCo等',a.retirement,'万円',{min:0,max:100000})}
       </div></section>
-      <section class="section"><h3>運用と積立</h3><div class="form-grid three">
+      <section class="section"><h3>積立・運用</h3><div class="form-grid three">
         ${field('assets.investReturn','運用資産の想定利回り',a.investReturn,'%/年',{min:-20,max:20,step:.1})}
-        ${field('assets.monthlyInvestment','手取りからの積立',a.monthlyInvestment,'万円/月',{min:0,max:300,step:.1,hint:'NISA等。積立分は現金から運用資産への移動として処理します。'})}
-        ${field('assets.investmentEndAge','積立終了年齢',a.investmentEndAge,'歳',{min:n(state.family.selfAge,35),max:90})}
+        ${field('assets.monthlyInvestment','手取りからの積立',a.monthlyInvestment,'万円/月',{min:0,max:300,step:.1,hint:'NISA等。積立分は現預金から運用資産への移転として処理します。'})}
+        ${field('assets.investmentStartAge','積立開始年齢',a.investmentStartAge,'歳',{min:currentAge,max:90})}
+        ${field('assets.investmentEndAge','積立終了年齢',a.investmentEndAge,'歳',{min:currentAge,max:90})}
+      </div></section>
+      <section class="section"><h3>受取・取り崩し</h3><div class="form-grid three">
+        ${field('assets.withdrawalStartAge','取り崩し開始年齢',a.withdrawalStartAge,'歳',{min:currentAge+1,max:110,hint:'積立終了後の年齢を設定してください。'})}
+        ${selectField('assets.withdrawalMethod','受取方法',a.withdrawalMethod||'annuity',[["lump","一括で受け取る"],["equal","分割して受け取る（運用なし）"],["annuity","運用しながら分割して受け取る"]])}
+        ${split?field('assets.withdrawalYears','受取期間',a.withdrawalYears||20,'年',{min:1,max:50,hint:'開始年を1年目として、指定年数で残高を取り崩します。'}):''}
+      </div><div class="mortgage-preview" id="investment-preview">${investmentPreviewMarkup()}</div></section>
+      <section class="section"><h3>DC・iDeCo等</h3><div class="form-grid three">
         ${field('assets.retirementReturn','DC等の想定利回り',a.retirementReturn,'%/年',{min:-20,max:20,step:.1})}
         ${field('assets.monthlyRetirement','DC・iDeCo等の積立',a.monthlyRetirement,'万円/月',{min:0,max:300,step:.1,hint:'入力する手取り年収が、この拠出前の金額であることを確認してください。'})}
-        ${field('assets.retirementContributionEndAge','DC等の積立終了',a.retirementContributionEndAge,'歳',{min:n(state.family.selfAge,35),max:75})}
-        ${field('assets.retirementReceiveAge','DC等の受取年齢',a.retirementReceiveAge,'歳',{min:55,max:75,hint:'受取年の年初に全額を現金へ移す簡易計算です。税金は未反映です。'})}
+        ${field('assets.retirementContributionEndAge','DC等の積立終了',a.retirementContributionEndAge,'歳',{min:currentAge,max:75})}
+        ${field('assets.retirementReceiveAge','DC等の受取年齢',a.retirementReceiveAge,'歳',{min:55,max:75,hint:'受取年に全額を現預金へ移す簡易計算です。税金は未反映です。'})}
       </div></section>
-      <div class="warning-box"><strong>資産不足の扱い：</strong>現預金が不足した場合は、まずNISA等の流動資産を取り崩します。受取可能年齢以降はDC等も使用し、それでも不足する額は「累積不足額」として隠さず表示します。</div>`;
+      <div class="info-box"><strong>資金不足時の扱い：</strong>家計赤字で現預金が不足した場合は、NISA等の換金可能な運用資産から必要額だけ自動で補填します。NISA等も使い切った後に初めて、赤い「資金不足」として表示します。DC・iDeCo等は設定した受取年齢までは補填に使いません。</div>`;
+  }
+
+  function mortgagePreviewMarkup() {
+    const h = state.housing;
+    if (!bool(h.purchasePlan)) return '';
+    const p = E.mortgagePreview(h, h.buyAge);
+    return `<div class="mortgage-preview-grid">
+      <div><span>借入額</span><strong>${formatWan(p.principal,1)}</strong></div>
+      <div><span>毎月返済額</span><strong>${formatWan(p.monthlyPayment,2)}</strong></div>
+      <div><span>年間返済額</span><strong>${formatWan(p.annualPayment,1)}</strong></div>
+      <div><span>総返済額</span><strong>${formatWan(p.totalPayment,1)}</strong></div>
+      <div><span>うち利息</span><strong>${formatWan(p.totalInterest,1)}</strong></div>
+      <div><span>購入時の現金支出</span><strong>${formatWan(p.upfront,1)}</strong></div>
+      <div><span>完済時期</span><strong>${p.completionAge}歳ごろ</strong></div>
+    </div><div class="source-note">元利均等返済・ボーナス返済なしの概算。総返済額には購入後の維持費を含みません。</div>`;
   }
 
   function housingStep() {
@@ -278,7 +363,7 @@
         ${field('housing.loanTerm','返済期間',h.loanTerm,'年',{min:1,max:50})}
         ${field('housing.interestRate','借入金利',h.interestRate,'%/年',{min:0,max:15,step:.01})}
         ${field('housing.annualMaintenance','固定資産税・維持費',h.annualMaintenance,'万円/年',{min:0,max:1000,hint:'管理費・修繕積立金・固定資産税・修繕費等の概算。物価上昇を反映します。'})}
-      </div>` : ''}</section>
+      </div><div class="mortgage-preview" id="mortgage-preview">${mortgagePreviewMarkup()}</div>` : ''}</section>
       <div class="info-box"><strong>年次の扱い：</strong>「40歳で購入」は40歳になる年の年初に購入すると仮定します。その年は現在の家賃を計上せず、初期費用・ローン返済・維持費を計上します。住宅の資産価値は金融資産に含めません。</div>`;
   }
 
@@ -287,7 +372,7 @@
     return `<div class="page-head"><div class="eyebrow">Step 6</div><h2>保険料とライフイベント</h2><p>自動的に「退職後30％」などとはせず、実際の払込終了年齢を設定します。</p></div>
       <section class="section"><h3>保険料</h3><div class="form-grid">
         ${field('insurance.annualPremium','年間保険料',ins.annualPremium,'万円/年',{min:0,max:2000})}
-        ${field('insurance.premiumEndAge','払込終了年齢',ins.premiumEndAge,'歳',{min:n(state.family.selfAge,35),max:100,hint:'払込済みの場合は現在年齢未満ではなく、年間保険料を0にしてください。'})}
+        ${field('insurance.premiumEndAge','払込終了年齢',ins.premiumEndAge,'歳',{min:n(state.family.selfAge,35),max:100,hint:'払込済みの場合は年間保険料を0にしてください。'})}
       </div></section>
       <section class="section"><h3>一時的な収入・支出</h3><div class="hint" style="margin-bottom:12px">車の購入、リフォーム、贈与、相続、旅行などを本人年齢で追加できます。</div>
         <div class="repeat-list">${events.map((ev,i)=>eventCard(ev,i)).join('')}</div>
@@ -314,12 +399,12 @@
       <div class="review-grid">
         ${reviewCard('家族',[['本人',`${f.selfAge}歳`],['配偶者',bool(f.hasSpouse)?`${f.spouseAge}歳`:'なし'],['子ども',`${childCount}人`]])}
         ${reviewCard('収入',[['本人年収',formatWan(state.income.self.gross)],['本人退職',`${state.income.self.retireAge}歳`],['収入変更点',`${incomeChanges}件`]])}
-        ${reviewCard('生活費',[['基本生活費',formatWan(l.baseAnnual)],['その他支出',formatWan(l.otherAnnual)],['物価上昇率',`${state.meta.inflationRate}%`]])}
-        ${reviewCard('資産',[['現預金',formatWan(a.cash)],['運用資産',formatWan(a.investment)],['DC等',formatWan(a.retirement)]])}
+        ${reviewCard('生活費',[['毎月の基本生活費',`${formatWan(l.baseMonthly,1)}/月`],['年間換算',formatWan(n(l.baseMonthly)*12,1)],['その他支出',formatWan(l.otherAnnual)],['物価上昇率',`${state.meta.inflationRate}%`]])}
+        ${reviewCard('資産',[['現預金',formatWan(a.cash)],['運用資産',formatWan(a.investment)],['積立期間',`${a.investmentStartAge}〜${a.investmentEndAge}歳`],['取崩し',`${a.withdrawalStartAge}歳から`],['DC等',formatWan(a.retirement)]])}
         ${reviewCard('住まい',[['現在住居費',`${h.monthlyCost}万円/月`],['購入予定',bool(h.purchasePlan)?`${h.buyAge}歳・${formatWan(h.price)}`:'なし'],['維持費',bool(h.purchasePlan)?formatWan(h.annualMaintenance):'—']])}
         ${reviewCard('備え・予定',[['年間保険料',formatWan(i.annualPremium)],['払込終了',`${i.premiumEndAge}歳`],['イベント',`${(state.events||[]).length}件`]])}
       </div>
-      <div class="warning-box" style="margin-top:18px"><strong>本ツールの範囲：</strong>将来の方向性を確認するための概算です。所得税・社会保険料・退職所得税、住宅ローン控除、児童手当、教育無償化、住宅資産価値などは個別計算していません。結果画面では、金融資産と資金不足を分けて表示します。</div>`;
+      <div class="warning-box" style="margin-top:18px"><strong>本ツールの範囲：</strong>将来の方向性を確認するための概算です。所得税・社会保険料・退職所得税、住宅ローン控除、児童手当、教育無償化、住宅資産価値などは個別計算していません。結果画面では、資産移転と家計支出を分け、毎年の検算差額を表示します。</div>`;
   }
 
   function reviewCard(title, pairs){
@@ -347,32 +432,44 @@
     </section></div></main>`;
   }
 
+  function resultStatus(r) {
+    const m=r.metrics;
+    if(m.firstLiquidShortfallAge!=null){
+      const later=m.firstTotalShortfallAge!=null?` ／ ${m.firstTotalShortfallAge}歳で純資産マイナス`:'';
+      return [`${m.firstLiquidShortfallAge}歳`,`利用可能資産が枯渇${later}`];
+    }
+    if(m.firstEmergencyWithdrawalAge!=null) return [`${m.firstEmergencyWithdrawalAge}歳`,'現預金不足による臨時取り崩し'];
+    if(m.firstPlannedWithdrawalAge!=null) return [`${m.firstPlannedWithdrawalAge}歳`,'設定どおり計画的に取り崩し'];
+    return ['なし',`${r.assumptions.horizonAge}歳まで取り崩しなし`];
+  }
+
   function resultScreen() {
     const r = lastResult;
     const m = r.metrics;
-    const status = m.firstTotalShortfallAge != null ? `${m.firstTotalShortfallAge}歳` : m.firstLiquidShortfallAge != null ? `${m.firstLiquidShortfallAge}歳` : 'なし';
-    const statusSub = m.firstTotalShortfallAge != null ? '資金不足が発生' : m.firstLiquidShortfallAge != null ? '流動資産が枯渇' : `${r.assumptions.horizonAge}歳まで`;
+    const [status,statusSub]=resultStatus(r);
     return `<section class="results-header"><div class="container">
       <div class="header-inner" style="height:auto"><div class="brand"><img src="assets/compass-logo.png" alt=""><span>COMPASS PLAN <small>light</small></span></div><div class="header-actions"><button class="btn btn-light btn-small" data-action="edit">入力を修正</button><button class="btn btn-primary btn-small" data-action="print">印刷・PDF</button></div></div>
-      <div class="results-title"><div><div class="brand-kicker">YOUR FINANCIAL ROUTE</div><h1>将来のお金の見通し</h1><p>資産残高だけでなく、使えるお金・退職資産・累積不足額を分けて確認します。</p></div></div>
+      <div class="results-title"><div><div class="brand-kicker">YOUR FINANCIAL ROUTE</div><h1>将来のお金の見通し</h1><p>資産の増減だけでなく、積立から取り崩しまでの資金移動と、資産が不足する時期を確認します。</p></div></div>
     </div></section>
     <main class="results-main"><div class="container">
       <div class="metric-grid">
-        ${metric('現在の年間収支',signedWan(r.current.annualBalance),'積立を含む概算')}
-        ${metric('資金不足の開始',status,statusSub)}
-        ${metric(`${state.income.self.retireAge}歳時の金融資産`,formatWan(m.retirementAssets),'住宅資産価値は含まない')}
-        ${metric(`${r.assumptions.horizonAge}歳時の金融資産`,formatWan(m.finalAssets),m.cumulativeShortfall>0?`累積不足 ${formatWan(m.cumulativeShortfall)}`:'累積不足なし')}
+        ${metric('現在の家計収支',signedWan(r.current.annualBalance),`積立前 ／ 積立後の現金増減 ${signedWan(r.current.cashChange)}`)}
+        ${metric('運用資産の出口',status,statusSub)}
+        ${metric(`${state.income.self.retireAge}歳時の純金融資産`,formatWan(m.retirementAssets),'住宅資産価値は含まない')}
+        ${metric(`${r.assumptions.horizonAge}歳時の純金融資産`,formatWan(m.finalAssets),m.finalCash<0?`未補填の資金不足 ${formatWan(m.finalCash)}`:'未補填の資金不足なし')}
       </div>
       <div class="result-layout"><div class="result-stack">
-        <section class="result-panel"><h2>金融資産の推移</h2><div class="chart-wrap"><canvas id="asset-chart"></canvas></div><div class="legend"><span><i style="background:#0a3474"></i>総金融資産</span><span><i style="background:#3788f6"></i>流動資産</span><span><i style="background:#8aa0bb"></i>DC・iDeCo等</span><span><i style="background:#ae2f38"></i>累積不足額</span></div></section>
-        <section class="result-panel"><h2>年間収支の推移</h2><div class="chart-wrap" style="height:300px"><canvas id="balance-chart"></canvas></div><div class="legend"><span><i style="background:#157f5b"></i>黒字</span><span><i style="background:#ae2f38"></i>赤字</span></div></section>
-        <section class="result-panel"><div class="table-tools"><h2 style="margin:0">年次キャッシュフロー</h2><label class="choice"><input type="checkbox" id="show-all-rows"> 全年表示</label></div><div class="table-scroll" id="cf-table"></div><div class="source-note">金額単位：万円。現在年齢の行は資産スナップショットで、年間収支は翌年齢の行から反映します。</div></section>
+        <section class="result-panel"><div class="panel-title-row"><div><h2>金融資産の構成と推移</h2><p>積み上げ棒は資産の内訳、線は純金融資産の合計です。</p></div></div><div class="chart-wrap"><canvas id="asset-chart"></canvas></div><div class="legend"><span><i class="legend-block cash"></i>現預金</span><span><i class="legend-block investment"></i>NISA等</span><span><i class="legend-block retirement"></i>DC・iDeCo等</span><span><i class="legend-block negative-cash"></i>資金不足</span><span><i class="legend-line total"></i>純金融資産</span></div><div class="source-note">現預金が不足した場合はNISA等から必要額を補填します。0円より下の赤い棒は、現預金と換金可能な運用資産を使い切っても補えない資金不足です。DC・iDeCo等は受取年齢まで使えないため、受取前は灰色の残高と赤い不足が同時に表示される場合があります。</div></section>
+        <section class="result-panel"><div class="panel-title-row"><div><h2>家計収支の推移</h2><p>収入－生活費・教育費・住宅費等。NISAやDCへの積立は資産移転のため含めません。</p></div></div><div class="chart-wrap" style="height:300px"><canvas id="balance-chart"></canvas></div><div class="legend"><span><i class="legend-block positive"></i>家計黒字</span><span><i class="legend-block negative-cash"></i>家計赤字</span></div></section>
+        <section class="result-panel"><div class="table-tools"><div><h2 style="margin:0">年次キャッシュフロー</h2><p class="table-sub">期首から期末までの動きを追い、右端で毎年検算します。</p></div><div class="table-options"><label class="choice"><input type="checkbox" id="show-detail-rows"> 内訳を表示</label><label class="choice"><input type="checkbox" id="show-all-rows"> 全年表示</label></div></div>
+          <div class="reconcile-formula"><strong>検算式</strong><span>期末純金融資産 ＝ 期首純金融資産 ＋ 収入 − 支出 ＋ 運用収益</span><span class="ok-badge">最大差額 ${formatWan(m.maxReconciliationGap,3)}</span></div>
+          <div class="table-scroll" id="cf-table"></div><div class="source-note">金額単位：万円。現在年齢の行は資産スナップショットで、年間収支は翌年齢の行から反映します。</div></section>
       </div><aside class="result-stack">
         <section class="result-panel"><h2>確認ポイント</h2><div class="alert-list">${alertsHtml(r)}</div></section>
         <section class="result-panel"><h2>計算前提</h2><div class="assumption-list">
           <div>物価上昇率：<strong>${r.assumptions.inflationRatePct}%</strong></div>
           <div>運用利回り：<strong>${r.assumptions.investReturnPct}%</strong> ／ DC等：<strong>${r.assumptions.retirementReturnPct}%</strong></div>
-          <div>${esc(r.assumptions.timing)}</div><div>${esc(r.assumptions.assetScope)}</div><div>${esc(r.assumptions.taxScope)}</div>
+          <div>${esc(r.assumptions.timing)}</div><div>${esc(r.assumptions.withdrawal)}</div><div>${esc(r.assumptions.assetScope)}</div><div>${esc(r.assumptions.reconciliation)}</div><div>${esc(r.assumptions.taxScope)}</div>
           ${m.housingBurdenPct!=null?`<div>購入年の住居費負担：<strong>${formatPct(m.housingBurdenPct)}</strong></div>`:''}
           ${m.mortgageTotalInterest?`<div>住宅ローン利息総額：<strong>${formatWan(m.mortgageTotalInterest)}</strong></div>`:''}
         </div></section>
@@ -392,13 +489,20 @@
   function render() {
     app.innerHTML = screen === 'landing' ? landing() : screen === 'editor' ? editor() : resultScreen();
     bindEvents();
-    if (screen === 'results') {
-      requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (screen === 'results') {
         drawAssetChart(document.getElementById('asset-chart'), lastResult.rows);
         drawBalanceChart(document.getElementById('balance-chart'), lastResult.rows.filter(r=>!r.isSnapshot));
-        renderTable(false);
-      });
-    }
+        renderTable(false,false);
+      } else if (screen === 'editor' && STEPS[currentStep][0] === 'income') {
+        updateIncomePreview('self');
+        if(bool(state.family.hasSpouse)) updateIncomePreview('spouse');
+      } else if (screen === 'editor' && STEPS[currentStep][0] === 'housing') {
+        updateMortgagePreview();
+      } else if (screen === 'editor' && STEPS[currentStep][0] === 'assets') {
+        updateInvestmentPreview();
+      }
+    });
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
 
@@ -409,8 +513,11 @@
     });
     app.querySelectorAll('[data-action]').forEach((el) => el.addEventListener('click', onAction));
     const allRows = document.getElementById('show-all-rows');
-    if (allRows) allRows.addEventListener('change', () => renderTable(allRows.checked));
-    window.addEventListener('resize', redrawCharts, { once: true });
+    const detailRows = document.getElementById('show-detail-rows');
+    const refreshTable=()=>renderTable(allRows&&allRows.checked,detailRows&&detailRows.checked);
+    if (allRows) allRows.addEventListener('change',refreshTable);
+    if (detailRows) detailRows.addEventListener('change',refreshTable);
+    if(!resizeBound){window.addEventListener('resize',()=>requestAnimationFrame(redrawVisibleCharts));resizeBound=true;}
   }
 
   function onFieldChange(e) {
@@ -425,8 +532,18 @@
     else if (el.tagName === 'SELECT' && (el.value === 'yes' || el.value === 'no')) value = el.value === 'yes';
     else value = el.value;
     setPath(state, path, value);
+    if(path.includes('.changes.') && path.endsWith('.age') && e.type==='change'){
+      const key=path.includes('income.spouse')?'spouse':'self';
+      state.income[key].changes.sort((a,b)=>n(a.age)-n(b.age));
+      saveState();render();return;
+    }
     saveState();
-    if (['family.hasSpouse','housing.purchasePlan'].includes(path) || path.includes('.timing')) render();
+    if (['family.hasSpouse','housing.purchasePlan','assets.withdrawalMethod'].includes(path) || path.includes('.timing')) { render(); return; }
+    if(path.startsWith('income.self')) updateIncomePreview('self');
+    if(path.startsWith('income.spouse')) updateIncomePreview('spouse');
+    if(path.startsWith('housing.')) updateMortgagePreview();
+    if(path.startsWith('assets.')) updateInvestmentPreview();
+    if(path==='living.baseMonthly') updateLivingConversion();
   }
 
   function onAction(e) {
@@ -445,7 +562,11 @@
     else if (action === 'reset') { if(confirm('入力内容をすべてリセットしますか？')){clearState();currentStep=0;screen='editor';render();} }
     else if (action === 'add-child') { state.family.children=state.family.children||[]; state.family.children.push({label:`第${state.family.children.length+1}子`,timing:'existing',age:0,yearsUntilBirth:1,currentEducation:0,finalEdu:'university',route:'public',away:false});saveState();render(); }
     else if (action === 'remove-child') { state.family.children.splice(Number(btn.dataset.index),1);saveState();render(); }
-    else if (action === 'add-income-change') { const p=state.income[btn.dataset.person];p.changes=p.changes||[];p.changes.push({age:(btn.dataset.person==='self'?n(state.family.selfAge):n(state.family.spouseAge))+10,gross:p.gross});saveState();render(); }
+    else if (action === 'add-income-change') {
+      const key=btn.dataset.person;const p=state.income[key];const base=key==='self'?n(state.family.selfAge):n(state.family.spouseAge);
+      p.changes=p.changes||[];const last=p.changes.length?Math.max(...p.changes.map(c=>n(c.age))):base;const age=Math.min(n(p.retireAge,65)-1,Math.max(base+1,last+5));
+      const normalized=E.normalizePerson(p,base);p.changes.push({age,gross:Math.round(E.grossAtAge(normalized,base,Math.max(base,age-1)))});p.changes.sort((a,b)=>n(a.age)-n(b.age));saveState();render();
+    }
     else if (action === 'remove-income-change') { state.income[btn.dataset.person].changes.splice(Number(btn.dataset.index),1);saveState();render(); }
     else if (action === 'add-event') { state.events=state.events||[];state.events.push({label:'',ageSelf:n(state.family.selfAge)+5,kind:'expense',amount:0,inflate:false});saveState();render(); }
     else if (action === 'remove-event') { state.events.splice(Number(btn.dataset.index),1);saveState();render(); }
@@ -460,15 +581,32 @@
       (state.family.children||[]).forEach((c,i)=>{if(c.timing==='planned'&&n(c.yearsUntilBirth)<1)errors.push(`第${i+1}子の誕生予定を入力してください。`);});
     }
     if(currentStep===1){
-      if(n(state.income.self.retireAge)<=n(state.family.selfAge))errors.push('本人の就業終了年齢は現在年齢より後にしてください。');
-      if(bool(state.family.hasSpouse)&&n(state.income.spouse.retireAge)<=n(state.family.spouseAge))errors.push('配偶者の就業終了年齢は現在年齢より後にしてください。');
+      validatePerson('self','本人',n(state.family.selfAge),errors);
+      if(bool(state.family.hasSpouse))validatePerson('spouse','配偶者',n(state.family.spouseAge),errors);
+    }
+    if(currentStep===3){
+      const a=state.assets, age=n(state.family.selfAge);
+      if(n(a.investmentStartAge)<age) errors.push('積立開始年齢は現在年齢以降にしてください。');
+      if(n(a.investmentEndAge)<n(a.investmentStartAge)) errors.push('積立終了年齢は積立開始年齢以降にしてください。');
+      if(n(a.withdrawalStartAge)<=n(a.investmentEndAge)) errors.push('取り崩し開始年齢は積立終了年齢より後にしてください。');
+      if(a.withdrawalMethod!=='lump'&&n(a.withdrawalYears)<1) errors.push('受取期間を入力してください。');
     }
     if(currentStep===4&&bool(state.housing.purchasePlan)){
       if(n(state.housing.price)<=0)errors.push('住宅の物件価格を入力してください。');
       if(n(state.housing.buyAge)<=n(state.family.selfAge))errors.push('購入年齢は現在年齢より後にしてください。');
       if(n(state.housing.downPayment)>n(state.housing.price))errors.push('頭金が物件価格を超えています。');
+      if(n(E.mortgagePreview(state.housing,state.housing.buyAge).principal)<=0)errors.push('住宅ローンの借入額が0円です。頭金・諸費用の設定を確認してください。');
     }
     return showErrors(errors);
+  }
+
+  function validatePerson(key,label,baseAge,errors){
+    const p=state.income[key];
+    if(n(p.retireAge)<=baseAge)errors.push(`${label}の就業終了年齢は現在年齢より後にしてください。`);
+    if(n(p.growthUntilAge)<baseAge)errors.push(`${label}の年収上昇終了年齢を確認してください。`);
+    const ages=(p.changes||[]).map(c=>n(c.age));
+    if(new Set(ages).size!==ages.length)errors.push(`${label}の年収変更年齢が重複しています。`);
+    (p.changes||[]).forEach((c,i)=>{if(n(c.age)<=baseAge||n(c.age)>=n(p.retireAge))errors.push(`${label}の収入変更${i+1}は、現在年齢より後・就業終了年齢より前にしてください。`);});
   }
 
   function validateAll(){
@@ -491,8 +629,8 @@
     ];
     d.income.self.gross=700;d.income.self.net=530;d.income.self.growthRate=1;d.income.self.growthUntilAge=50;d.income.self.changes=[{age:55,gross:650},{age:60,gross:420}];d.income.self.retireAge=65;d.income.self.pensionMonthly65=16;d.income.self.severance=1500;
     d.income.spouse.gross=450;d.income.spouse.net=350;d.income.spouse.growthRate=1;d.income.spouse.growthUntilAge=48;d.income.spouse.changes=[{age:45,gross:520}];d.income.spouse.retireAge=65;d.income.spouse.pensionMonthly65=11;d.income.spouse.severance=700;
-    d.living.baseAnnual=360;d.living.otherAnnual=50;d.meta.inflationRate=1.5;
-    d.assets.cash=800;d.assets.investment=450;d.assets.retirement=250;d.assets.monthlyInvestment=10;d.assets.monthlyRetirement=3;d.assets.investReturn=3;d.assets.retirementReturn=3;
+    d.living.baseMonthly=30;d.living.otherAnnual=50;d.meta.inflationRate=1.5;
+    d.assets.cash=800;d.assets.investment=450;d.assets.retirement=250;d.assets.monthlyInvestment=10;d.assets.investmentStartAge=38;d.assets.investmentEndAge=60;d.assets.withdrawalStartAge=65;d.assets.withdrawalMethod='annuity';d.assets.withdrawalYears=20;d.assets.monthlyRetirement=3;d.assets.investReturn=3;d.assets.retirementReturn=3;
     d.housing.monthlyCost=13;d.housing.purchasePlan=true;d.housing.buyAge=42;d.housing.price=5200;d.housing.downPayment=700;d.housing.miscRate=7;d.housing.loanTerm=35;d.housing.interestRate=1.2;d.housing.annualMaintenance=38;
     d.insurance.annualPremium=36;d.insurance.premiumEndAge=60;d.events=[{label:'車の買い替え',ageSelf:48,kind:'expense',amount:350,inflate:true},{label:'住宅リフォーム',ageSelf:68,kind:'expense',amount:600,inflate:true}];
     return d;
@@ -502,43 +640,93 @@
     const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='compass-plan-light-data.json';a.click();URL.revokeObjectURL(a.href);
   }
 
-  function renderTable(showAll){
-    const holder=document.getElementById('cf-table');if(!holder)return;
-    const eventAges=new Set(lastResult.events.map(e=>e.age));
-    const rows=lastResult.rows.filter((r,i)=>showAll||r.isSnapshot||i===lastResult.rows.length-1||r.selfAge%5===0||eventAges.has(r.selfAge)||r.annualShortfall>0);
-    holder.innerHTML=`<table><thead><tr><th>年齢</th><th>収入</th><th>支出</th><th>積立</th><th>年間収支</th><th>現預金</th><th>運用資産</th><th>DC等</th><th>総金融資産</th><th>不足累計</th><th>ローン残高</th></tr></thead><tbody>${rows.map(r=>{
-      const ev=eventAges.has(r.selfAge);return `<tr class="${r.annualBalance<0?'negative':''} ${ev?'event-row':''}"><td>${r.selfAge}歳${r.isSnapshot?'（現在）':''}</td><td>${r.isSnapshot?'—':numCell(r.income)}</td><td>${r.isSnapshot?'—':numCell(r.expense)}</td><td>${r.isSnapshot?'—':numCell(r.investmentContribution+r.retirementContribution)}</td><td>${r.isSnapshot?'—':numCell(r.annualBalance)}</td><td>${numCell(r.cash)}</td><td>${numCell(r.investment)}</td><td>${numCell(r.retirement)}</td><td>${numCell(r.totalFinancialAssets)}</td><td>${numCell(r.cumulativeShortfall)}</td><td>${numCell(r.mortgageBalance)}</td></tr>`;}).join('')}</tbody></table>`;
+  function eventLabelsByAge(){
+    const map=new Map();
+    (lastResult.events||[]).forEach(ev=>{const arr=map.get(ev.age)||[];arr.push(ev.label);map.set(ev.age,arr);});
+    return map;
   }
 
-  function numCell(v){return n(v).toLocaleString('ja-JP',{maximumFractionDigits:0});}
+  function renderTable(showAll,showDetail){
+    const holder=document.getElementById('cf-table');if(!holder)return;
+    const labels=eventLabelsByAge();
+    const rows=lastResult.rows.filter((r,i)=>showAll||r.isSnapshot||i===lastResult.rows.length-1||r.selfAge%5===0||labels.has(r.selfAge)||r.cash<0||n(r.investmentWithdrawal)>0||Math.abs(r.reconciliationGap)>0.01);
+    const detailHead=showDetail?'<th>給与</th><th>年金</th><th>退職金</th><th>他収入</th><th>生活費</th><th>教育費</th><th>住居費</th><th>保険</th><th>他支出</th><th>住宅初期費用</th><th>計画取崩</th><th>臨時取崩</th><th>DC受取</th><th>ローン残高</th>':'';
+    holder.innerHTML=`<table class="cf-table ${showDetail?'detail':''}"><thead><tr><th>年齢</th><th>主なイベント</th><th>期首総資産</th><th>収入</th><th>支出</th><th>家計収支</th><th>積立移転</th><th>運用取崩</th><th>運用収益</th><th>現金増減</th><th>期末現預金</th><th>NISA等</th><th>DC等</th><th>期末総資産</th><th>検算</th>${detailHead}</tr></thead><tbody>${rows.map(r=>tableRow(r,labels,showDetail)).join('')}</tbody></table>`;
+  }
 
-  function redrawCharts(){if(screen==='results'&&lastResult){drawAssetChart(document.getElementById('asset-chart'),lastResult.rows);drawBalanceChart(document.getElementById('balance-chart'),lastResult.rows.filter(r=>!r.isSnapshot));}}
+  function tableRow(r,labels,showDetail){
+    const event=(labels.get(r.selfAge)||[]).join('／');
+    const classes=[r.annualBalance<0?'negative':'',r.cash<0?'cash-negative':'',r.totalFinancialAssets<0?'total-negative':'',event?'event-row':''].filter(Boolean).join(' ');
+    const transfer=n(r.investmentContribution)+n(r.retirementContribution);
+    const verify=Math.abs(n(r.reconciliationGap))<0.01?'<span class="verify-ok">OK</span>':`<span class="verify-ng">${numCell(r.reconciliationGap,3)}</span>`;
+    const summary=`<td>${r.selfAge}歳${r.isSnapshot?'（現在）':''}</td><td class="event-cell">${event?esc(event):'—'}</td><td>${numCell(r.openingTotalFinancialAssets)}</td><td>${r.isSnapshot?'—':numCell(r.income)}</td><td>${r.isSnapshot?'—':numCell(r.expense)}</td><td>${r.isSnapshot?'—':signedCell(r.annualBalance)}</td><td>${r.isSnapshot?'—':numCell(transfer)}</td><td>${r.isSnapshot?'—':numCell(r.investmentWithdrawal)}</td><td>${r.isSnapshot?'—':signedCell(r.totalReturn)}</td><td>${r.isSnapshot?'—':signedCell(r.cashChange)}</td><td class="${r.cash<0?'strong-negative':''}">${numCell(r.cash)}</td><td>${numCell(r.investment)}</td><td>${numCell(r.retirement)}</td><td class="${r.totalFinancialAssets<0?'strong-negative':''}">${numCell(r.totalFinancialAssets)}</td><td>${verify}</td>`;
+    const detail=showDetail?`<td>${r.isSnapshot?'—':numCell(r.employmentIncome)}</td><td>${r.isSnapshot?'—':numCell(r.pensionIncome)}</td><td>${r.isSnapshot?'—':numCell(r.severanceIncome)}</td><td>${r.isSnapshot?'—':numCell(r.otherIncome)}</td><td>${r.isSnapshot?'—':numCell(r.livingExpense)}</td><td>${r.isSnapshot?'—':numCell(r.educationExpense)}</td><td>${r.isSnapshot?'—':numCell(r.housingExpense)}</td><td>${r.isSnapshot?'—':numCell(r.insuranceExpense)}</td><td>${r.isSnapshot?'—':numCell(r.otherExpense)}</td><td>${r.isSnapshot?'—':numCell(r.homeUpfront)}</td><td>${r.isSnapshot?'—':numCell(r.plannedInvestmentWithdrawal)}</td><td>${r.isSnapshot?'—':numCell(r.emergencyInvestmentWithdrawal)}</td><td>${r.isSnapshot?'—':numCell(r.retirementRelease)}</td><td>${numCell(r.mortgageBalance)}</td>`:'';
+    return `<tr class="${classes}">${summary}${detail}</tr>`;
+  }
+
+  function numCell(v,digits=0){return n(v).toLocaleString('ja-JP',{minimumFractionDigits:0,maximumFractionDigits:digits});}
+  function signedCell(v){const x=n(v);return `<span class="${x<0?'num-negative':x>0?'num-positive':''}">${x>0?'+':''}${numCell(x)}</span>`;}
+
+  function updateLivingConversion(){
+    const strip=document.querySelector('.conversion-strip');if(!strip)return;const m=n(state.living.baseMonthly);strip.innerHTML=`<span>月額</span><strong>${formatWan(m,1)}</strong><span>× 12か月 ＝ 年間</span><strong>${formatWan(m*12,1)}</strong>`;
+  }
+
+  function updateMortgagePreview(){
+    const holder=document.getElementById('mortgage-preview');if(holder)holder.innerHTML=mortgagePreviewMarkup();
+  }
+
+  function updateInvestmentPreview(){
+    const holder=document.getElementById('investment-preview');if(holder)holder.innerHTML=investmentPreviewMarkup();
+  }
+
+  function updateIncomePreview(key){
+    const baseAge=key==='self'?n(state.family.selfAge,35):n(state.family.spouseAge,33);
+    const canvas=document.getElementById(`income-chart-${key}`);if(canvas)drawIncomeChart(canvas,state.income[key],baseAge);
+    const summary=document.getElementById(`income-summary-${key}`);if(summary)summary.innerHTML=incomeSummaryHtml(key,baseAge);
+  }
+
+  function redrawVisibleCharts(){
+    if(screen==='results'&&lastResult){drawAssetChart(document.getElementById('asset-chart'),lastResult.rows);drawBalanceChart(document.getElementById('balance-chart'),lastResult.rows.filter(r=>!r.isSnapshot));}
+    if(screen==='editor'&&STEPS[currentStep][0]==='income'){updateIncomePreview('self');if(bool(state.family.hasSpouse))updateIncomePreview('spouse');}
+  }
 
   function canvasSetup(canvas){
-    if(!canvas)return null;const rect=canvas.getBoundingClientRect();const dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=Math.max(300,rect.width*dpr);canvas.height=Math.max(200,rect.height*dpr);const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);return {ctx,w:rect.width,h:rect.height};
+    if(!canvas)return null;const rect=canvas.getBoundingClientRect();if(rect.width<10||rect.height<10)return null;const dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=Math.max(300,Math.round(rect.width*dpr));canvas.height=Math.max(160,Math.round(rect.height*dpr));const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);return {ctx,w:rect.width,h:rect.height};
+  }
+
+  function drawIncomeChart(canvas,rawPerson,baseAge){
+    const setup=canvasSetup(canvas);if(!setup)return;const {ctx,w,h}=setup;const p=E.normalizePerson(rawPerson,baseAge);const end=Math.max(baseAge+1,p.retireAge);const ages=[];for(let age=baseAge;age<=end;age++)ages.push(age);const values=ages.map(age=>E.grossAtAge(p,baseAge,age));const max=Math.max(100,...values)*1.12;const pad={l:42,r:12,t:14,b:30};const pw=w-pad.l-pad.r,ph=h-pad.t-pad.b;const x=i=>pad.l+i/(ages.length-1)*pw;const y=v=>pad.t+ph-(v/max)*ph;
+    ctx.clearRect(0,0,w,h);ctx.font='10px sans-serif';ctx.strokeStyle='#e2e9f1';ctx.fillStyle='#718096';ctx.lineWidth=1;
+    for(let i=0;i<=3;i++){const yy=pad.t+ph*i/3;ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.textAlign='right';ctx.fillText(Math.round(max*(1-i/3)).toLocaleString(),pad.l-6,yy+3);}
+    ctx.beginPath();values.forEach((v,i)=>{const xx=x(i),yy=y(v);i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);});ctx.strokeStyle='#0a3474';ctx.lineWidth=2.5;ctx.stroke();
+    const markerAges=new Set([baseAge,p.growthUntilAge,...p.changes.map(c=>c.age),p.retireAge]);
+    ages.forEach((age,i)=>{if(!markerAges.has(age))return;const xx=x(i),yy=y(values[i]);ctx.beginPath();ctx.arc(xx,yy,3.5,0,Math.PI*2);ctx.fillStyle=age===p.retireAge?'#ae2f38':'#3788f6';ctx.fill();ctx.fillStyle='#66758a';ctx.textAlign='center';ctx.fillText(`${age}歳`,xx,h-9);});
   }
 
   function drawAssetChart(canvas,rows){
-    const setup=canvasSetup(canvas);if(!setup)return;const {ctx,w,h}=setup;const pad={l:55,r:18,t:18,b:38};const pw=w-pad.l-pad.r,ph=h-pad.t-pad.b;
-    const series=[['totalFinancialAssets','#0a3474'],['liquidAssets','#3788f6'],['retirement','#8aa0bb'],['cumulativeShortfall','#ae2f38']];
-    const max=Math.max(100,...rows.flatMap(r=>series.map(([k])=>n(r[k]))));const min=0;
+    const setup=canvasSetup(canvas);if(!setup)return;const {ctx,w,h}=setup;const pad={l:58,r:18,t:20,b:40};const pw=w-pad.l-pad.r,ph=h-pad.t-pad.b;
+    const positiveTops=rows.map(r=>Math.max(0,n(r.cash))+Math.max(0,n(r.investment))+Math.max(0,n(r.retirement)));
+    const totals=rows.map(r=>n(r.totalFinancialAssets));
+    let max=Math.max(100,...positiveTops,...totals);let min=Math.min(0,...rows.map(r=>Math.min(0,n(r.cash))),...totals);if(max-min<100)max=min+100;const margin=(max-min)*.08;max+=margin;min-=margin;
+    const y=v=>pad.t+(max-v)/(max-min)*ph;const zero=y(0);const slot=pw/rows.length;const bw=Math.max(1,Math.min(13,slot*.72));
     ctx.clearRect(0,0,w,h);ctx.font='11px sans-serif';ctx.fillStyle='#708096';ctx.strokeStyle='#e1e8f0';ctx.lineWidth=1;
-    for(let i=0;i<=5;i++){const y=pad.t+ph*i/5;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();const val=max*(1-i/5);ctx.textAlign='right';ctx.fillText(Math.round(val).toLocaleString(),pad.l-8,y+4);}
-    const x=i=>pad.l+(rows.length===1?0:i/(rows.length-1))*pw;const y=v=>pad.t+ph-(v-min)/(max-min)*ph;
-    series.forEach(([key,color])=>{ctx.beginPath();rows.forEach((r,i)=>{const xx=x(i),yy=y(n(r[key]));i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);});ctx.strokeStyle=color;ctx.lineWidth=key==='totalFinancialAssets'?3:2;ctx.stroke();});
-    labelXAxis(ctx,rows,x,h,pad);
+    for(let i=0;i<=5;i++){const val=max-(max-min)*i/5;const yy=y(val);ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.textAlign='right';ctx.fillText(Math.round(val).toLocaleString(),pad.l-8,yy+4);}
+    ctx.strokeStyle='#9aa9ba';ctx.lineWidth=1.3;ctx.beginPath();ctx.moveTo(pad.l,zero);ctx.lineTo(w-pad.r,zero);ctx.stroke();
+    rows.forEach((r,i)=>{const xx=pad.l+(i+.5)*slot;let base=0;const parts=[[Math.max(0,n(r.cash)),'#6eb7ff'],[Math.max(0,n(r.investment)),'#0a3474'],[Math.max(0,n(r.retirement)),'#8aa0bb']];parts.forEach(([val,color])=>{if(val<=0)return;const yTop=y(base+val),yBottom=y(base);ctx.fillStyle=color;ctx.fillRect(xx-bw/2,yTop,bw,Math.max(1,yBottom-yTop));base+=val;});if(n(r.cash)<0){ctx.fillStyle='#ae2f38';ctx.fillRect(xx-bw/2,zero,bw,Math.max(1,y(n(r.cash))-zero));}});
+    ctx.beginPath();rows.forEach((r,i)=>{const xx=pad.l+(i+.5)*slot,yy=y(n(r.totalFinancialAssets));i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);});ctx.strokeStyle='#17263a';ctx.lineWidth=2.3;ctx.stroke();
+    labelXAxis(ctx,rows,i=>pad.l+(i+.5)*slot,h,pad,w);
   }
 
   function drawBalanceChart(canvas,rows){
     const setup=canvasSetup(canvas);if(!setup)return;const {ctx,w,h}=setup;const pad={l:55,r:18,t:18,b:38};const pw=w-pad.l-pad.r,ph=h-pad.t-pad.b;
-    const vals=rows.map(r=>n(r.annualBalance));const max=Math.max(100,...vals.map(Math.abs));ctx.clearRect(0,0,w,h);ctx.font='11px sans-serif';ctx.fillStyle='#708096';ctx.strokeStyle='#e1e8f0';
-    const y=v=>pad.t+ph/2-(v/max)*(ph/2*.9);const zero=y(0);for(let i=0;i<=4;i++){const val=max-(max*2*i/4);const yy=y(val);ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.textAlign='right';ctx.fillText(Math.round(val).toLocaleString(),pad.l-8,yy+4);}
+    const vals=rows.map(r=>n(r.annualBalance));const maxAbs=Math.max(100,...vals.map(Math.abs));ctx.clearRect(0,0,w,h);ctx.font='11px sans-serif';ctx.fillStyle='#708096';ctx.strokeStyle='#e1e8f0';
+    const y=v=>pad.t+ph/2-(v/maxAbs)*(ph/2*.9);const zero=y(0);for(let i=0;i<=4;i++){const val=maxAbs-(maxAbs*2*i/4);const yy=y(val);ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.textAlign='right';ctx.fillText(Math.round(val).toLocaleString(),pad.l-8,yy+4);}
     const bw=Math.max(1,pw/rows.length*.7);rows.forEach((r,i)=>{const x=pad.l+(i+.5)/rows.length*pw;const yy=y(r.annualBalance);ctx.fillStyle=r.annualBalance>=0?'#157f5b':'#ae2f38';ctx.fillRect(x-bw/2,Math.min(zero,yy),bw,Math.abs(zero-yy));});
-    labelXAxis(ctx,rows,i=>pad.l+(i+.5)/rows.length*pw,h,pad);
+    labelXAxis(ctx,rows,i=>pad.l+(i+.5)/rows.length*pw,h,pad,w);
   }
 
-  function labelXAxis(ctx,rows,x,h,pad){
-    ctx.fillStyle='#708096';ctx.textAlign='center';const labels=[];rows.forEach((r,i)=>{if(i===0||i===rows.length-1||r.selfAge%10===0)labels.push([i,r.selfAge]);});labels.forEach(([i,a])=>ctx.fillText(`${a}歳`,x(i),h-12));
+  function labelXAxis(ctx,rows,x,h,pad,w){
+    ctx.fillStyle='#708096';ctx.textAlign='center';const interval=w<650?10:5;rows.forEach((r,i)=>{if(i===0||i===rows.length-1||r.selfAge%interval===0)ctx.fillText(`${r.selfAge}歳`,x(i),h-12);});
   }
 
   render();

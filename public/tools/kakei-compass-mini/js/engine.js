@@ -5,7 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const VERSION = '1.0.0';
+  const VERSION = '1.2.0';
   const EPS = 1e-9;
 
   // 令和5年度「子供の学習費調査」訂正後の概算（万円/年）
@@ -54,6 +54,19 @@
     return Math.round((value + Number.EPSILON) * p) / p;
   }
 
+  function deepMerge(base, extra) {
+    if (Array.isArray(extra)) return extra.slice();
+    if (!extra || typeof extra !== 'object') return extra === undefined ? base : extra;
+    const out = Object.assign({}, base || {});
+    Object.keys(extra).forEach((key) => {
+      const source = extra[key];
+      out[key] = source && typeof source === 'object' && !Array.isArray(source)
+        ? deepMerge(base && base[key] || {}, source)
+        : source;
+    });
+    return out;
+  }
+
   function estimateNetIncome(gross) {
     gross = Math.max(0, num(gross));
     if (gross <= 0) return 0;
@@ -76,7 +89,6 @@
     if (startAge === 65) return 1;
     const months = Math.abs(startAge - 65) * 12;
     if (startAge < 65) {
-      // 1962/4/2以降生まれは月0.4%。それ以前は月0.5%。
       const monthlyReduction = birthYear && birthYear <= 1962 ? 0.005 : 0.004;
       return Math.max(0, 1 - monthlyReduction * months);
     }
@@ -135,7 +147,6 @@
     const stage = childStage(age);
     if (stage === 'none') return 0;
 
-    // 現在と同じ学校段階にいる間は、入力された実額を優先する。
     const currentStage = childStage(currentAge);
     const actualCurrent = Math.max(0, num(child.currentEducation, 0));
     if (actualCurrent > 0 && stage === currentStage && projectionYearIndex > 0) {
@@ -153,7 +164,6 @@
       return cost;
     }
 
-    // 高校卒業までの指定の場合、18歳以降はゼロ。
     const schoolType = schoolTypeForStage(route, stage);
     return SCHOOL_COST[stage][schoolType] || 0;
   }
@@ -164,13 +174,13 @@
     const currentNet = Math.max(0, num(raw.net, 0));
     const changes = Array.isArray(raw.changes) ? raw.changes
       .map((c) => ({ age: int(c.age, 0), gross: Math.max(0, num(c.gross, 0)) }))
-      .filter((c) => c.age >= baseAge && c.gross >= 0)
+      .filter((c) => c.age > baseAge && c.gross >= 0)
       .sort((a, b) => a.age - b.age) : [];
     return {
       currentGross,
       currentNet,
       growthRate: num(raw.growthRate, 0),
-      growthUntilAge: int(raw.growthUntilAge, baseAge),
+      growthUntilAge: Math.max(baseAge, int(raw.growthUntilAge, baseAge)),
       changes,
       retireAge: int(raw.retireAge, 65),
       pensionStartAge: int(raw.pensionStartAge, 65),
@@ -186,8 +196,8 @@
     if (age >= person.retireAge) return 0;
     let milestoneAge = baseAge;
     let milestoneGross = person.currentGross;
-    for (const change of person.changes) {
-      if (change.age <= age && change.age >= milestoneAge) {
+    for (const change of person.changes || []) {
+      if (change.age <= age && change.age > milestoneAge) {
         milestoneAge = change.age;
         milestoneGross = change.gross;
       }
@@ -217,7 +227,8 @@
     const price = Math.max(0, num(housing.price, 0));
     const down = Math.min(price, Math.max(0, num(housing.downPayment, 0)));
     const misc = price * Math.max(0, num(housing.miscRate, 0)) / 100;
-    const principal = Math.max(0, price - down + ((housing.miscInLoan === true || housing.miscInLoan === 'yes') ? misc : 0));
+    const miscInLoan = housing.miscInLoan === true || housing.miscInLoan === 'yes';
+    const principal = Math.max(0, price - down + (miscInLoan ? misc : 0));
     const termYears = Math.max(1, int(housing.loanTerm, 35));
     const rate = Math.max(0, num(housing.interestRate, 0));
     return {
@@ -226,8 +237,9 @@
       monthlyPayment: monthlyPayment(principal, rate, termYears),
       annualRate: rate,
       monthsRemaining: termYears * 12,
-      upfront: down + ((housing.miscInLoan === true || housing.miscInLoan === 'yes') ? 0 : misc),
+      upfront: down + (miscInLoan ? 0 : misc),
       misc,
+      termYears,
       totalInterest: 0
     };
   }
@@ -260,6 +272,23 @@
     return { payment, interest, principal: principalPaid };
   }
 
+  function mortgagePreview(housing, buyAge) {
+    const mortgage = createMortgage(housing || {});
+    const months = mortgage.termYears * 12;
+    const totalPayment = mortgage.monthlyPayment * months;
+    return {
+      principal: round(mortgage.principal, 1),
+      monthlyPayment: round(mortgage.monthlyPayment, 2),
+      annualPayment: round(mortgage.monthlyPayment * 12, 1),
+      totalPayment: round(totalPayment, 1),
+      totalInterest: round(Math.max(0, totalPayment - mortgage.principal), 1),
+      upfront: round(mortgage.upfront, 1),
+      misc: round(mortgage.misc, 1),
+      completionAge: int(buyAge, 0) + mortgage.termYears,
+      termYears: mortgage.termYears
+    };
+  }
+
   function defaultData() {
     const currentYear = new Date().getFullYear();
     return {
@@ -269,25 +298,76 @@
         self: { gross: 600, net: '', growthRate: 1, growthUntilAge: 50, changes: [], retireAge: 65, pensionStartAge: 65, pensionMonthly65: 15, severance: 1000, otherAnnual: 0, otherIncomeEndAge: 65 },
         spouse: { gross: 400, net: '', growthRate: 1, growthUntilAge: 50, changes: [], retireAge: 65, pensionStartAge: 65, pensionMonthly65: 10, severance: 500, otherAnnual: 0, otherIncomeEndAge: 65 }
       },
-      living: { baseAnnual: 300, otherAnnual: 30, inflateOther: true, childLivingAdjust: true },
-      assets: { cash: 500, investment: 200, retirement: 100, investReturn: 3, retirementReturn: 3, monthlyInvestment: 5, investmentEndAge: 65, monthlyRetirement: 2, retirementContributionEndAge: 60, retirementReceiveAge: 65 },
+      living: { baseMonthly: 25, otherAnnual: 30, inflateOther: true, childLivingAdjust: true },
+      assets: { cash: 500, investment: 200, retirement: 100, investReturn: 3, retirementReturn: 3, monthlyInvestment: 5, investmentStartAge: 35, investmentEndAge: 60, withdrawalStartAge: 65, withdrawalMethod: 'annuity', withdrawalYears: 20, autoEmergencyWithdrawal: true, monthlyRetirement: 2, retirementContributionEndAge: 60, retirementReceiveAge: 65 },
       housing: { currentType: 'rent', monthlyCost: 10, currentCostEndAge: 99, currentAnnualAfterEnd: 0, purchasePlan: false, buyAge: 40, price: 4500, downPayment: 500, miscRate: 7, miscInLoan: false, loanTerm: 35, interestRate: 1.0, annualMaintenance: 30 },
       insurance: { annualPremium: 24, premiumEndAge: 65 },
       events: []
     };
   }
 
-  function project(rawData) {
-    const data = Object.assign(defaultData(), rawData || {});
-    data.meta = Object.assign(defaultData().meta, rawData && rawData.meta || {});
-    data.family = Object.assign(defaultData().family, rawData && rawData.family || {});
-    data.income = Object.assign(defaultData().income, rawData && rawData.income || {});
-    data.living = Object.assign(defaultData().living, rawData && rawData.living || {});
-    data.assets = Object.assign(defaultData().assets, rawData && rawData.assets || {});
-    data.housing = Object.assign(defaultData().housing, rawData && rawData.housing || {});
-    data.insurance = Object.assign(defaultData().insurance, rawData && rawData.insurance || {});
-    data.events = Array.isArray(rawData && rawData.events) ? rawData.events : [];
+  function normalizeData(rawData) {
+    const merged = deepMerge(defaultData(), rawData || {});
+    if ((merged.living.baseMonthly === '' || merged.living.baseMonthly == null) && merged.living.baseAnnual != null) {
+      merged.living.baseMonthly = num(merged.living.baseAnnual, 0) / 12;
+    }
+    const rawAssets = rawData && rawData.assets ? rawData.assets : {};
+    if (rawAssets.investmentStartAge == null || rawAssets.investmentStartAge === '') {
+      merged.assets.investmentStartAge = int(merged.family.selfAge, 35);
+    }
+    if (rawAssets.withdrawalStartAge == null || rawAssets.withdrawalStartAge === '') {
+      merged.assets.withdrawalStartAge = Math.max(int(merged.assets.investmentEndAge, 60) + 1, int(merged.income.self.retireAge, 65));
+    }
+    if (!['lump', 'equal', 'annuity'].includes(merged.assets.withdrawalMethod)) merged.assets.withdrawalMethod = 'annuity';
+    merged.assets.withdrawalYears = clamp(int(merged.assets.withdrawalYears, 20), 1, 50);
+    merged.assets.autoEmergencyWithdrawal = merged.assets.autoEmergencyWithdrawal !== false && merged.assets.autoEmergencyWithdrawal !== 'no';
+    return merged;
+  }
 
+  function annuityWithdrawal(principal, annualRate, years) {
+    principal = Math.max(0, num(principal, 0));
+    years = clamp(int(years, 1), 1, 50);
+    annualRate = clamp(num(annualRate, 0), -0.95, 1);
+    if (principal <= EPS) return 0;
+    if (Math.abs(annualRate) <= EPS) return principal / years;
+    const denominator = 1 - (1 + annualRate) ** (-years);
+    if (Math.abs(denominator) <= EPS) return principal / years;
+    return principal * annualRate / denominator;
+  }
+
+  function investmentPlanPreview(rawAssets, currentAge) {
+    const a = deepMerge(defaultData().assets, rawAssets || {});
+    const age0 = clamp(int(currentAge, 35), 18, 85);
+    const startAge = clamp(int(a.investmentStartAge, age0), age0, 100);
+    const endAge = clamp(int(a.investmentEndAge, Math.max(age0, 60)), startAge, 100);
+    const withdrawalStartAge = clamp(int(a.withdrawalStartAge, Math.max(endAge + 1, 65)), age0 + 1, 110);
+    const years = clamp(int(a.withdrawalYears, 20), 1, 50);
+    const method = ['lump', 'equal', 'annuity'].includes(a.withdrawalMethod) ? a.withdrawalMethod : 'annuity';
+    const rate = clamp(num(a.investReturn, 3), -20, 20) / 100;
+    const annualContribution = Math.max(0, num(a.monthlyInvestment, 0)) * 12;
+    let balance = Math.max(0, num(a.investment, 0));
+    for (let age = age0 + 1; age < withdrawalStartAge; age++) {
+      balance *= (1 + rate);
+      if (age >= startAge && age <= endAge) balance += annualContribution;
+    }
+    const annualWithdrawal = method === 'lump'
+      ? balance
+      : method === 'equal'
+        ? balance / years
+        : annuityWithdrawal(balance, rate, years);
+    return {
+      projectedBalance: round(balance, 1),
+      annualWithdrawal: round(annualWithdrawal, 1),
+      monthlyWithdrawal: round(annualWithdrawal / 12, 2),
+      withdrawalStartAge,
+      endAge: method === 'lump' ? withdrawalStartAge : withdrawalStartAge + years - 1,
+      method,
+      years
+    };
+  }
+
+  function project(rawData) {
+    const data = normalizeData(rawData);
     const currentYear = int(data.meta.currentYear, new Date().getFullYear());
     const selfAge0 = clamp(int(data.family.selfAge, 35), 18, 85);
     const hasSpouse = data.family.hasSpouse === true || data.family.hasSpouse === 'yes';
@@ -299,11 +379,10 @@
     const self = normalizePerson(data.income.self, selfAge0);
     const spouse = hasSpouse ? normalizePerson(data.income.spouse, spouseAge0) : null;
 
-    let cash = Math.max(0, num(data.assets.cash, 0));
+    let cash = num(data.assets.cash, 0);
     let investment = Math.max(0, num(data.assets.investment, 0));
     let retirement = Math.max(0, num(data.assets.retirement, 0));
     const initialFinancialAssets = cash + investment + retirement;
-    let cumulativeShortfall = 0;
     let mortgage = null;
     let purchased = false;
     let retirementReleased = false;
@@ -312,39 +391,61 @@
     const retirementReturn = clamp(num(data.assets.retirementReturn, 3), -20, 20) / 100;
     const annualInvestContribution = Math.max(0, num(data.assets.monthlyInvestment, 0)) * 12;
     const annualRetirementContribution = Math.max(0, num(data.assets.monthlyRetirement, 0)) * 12;
-    const investEndAge = int(data.assets.investmentEndAge, self.retireAge);
+    const investStartAge = clamp(int(data.assets.investmentStartAge, selfAge0), selfAge0, 100);
+    const investEndAge = clamp(int(data.assets.investmentEndAge, self.retireAge), investStartAge, 100);
+    const withdrawalStartAge = clamp(int(data.assets.withdrawalStartAge, Math.max(investEndAge + 1, self.retireAge)), selfAge0 + 1, 110);
+    const withdrawalMethod = ['lump', 'equal', 'annuity'].includes(data.assets.withdrawalMethod) ? data.assets.withdrawalMethod : 'annuity';
+    const withdrawalYears = clamp(int(data.assets.withdrawalYears, 20), 1, 50);
+    const autoEmergencyWithdrawal = data.assets.autoEmergencyWithdrawal !== false && data.assets.autoEmergencyWithdrawal !== 'no';
+    const effectiveInvestEndAge = Math.min(investEndAge, withdrawalStartAge - 1);
     const retirementContributionEndAge = int(data.assets.retirementContributionEndAge, self.retireAge);
     const retirementReceiveAge = int(data.assets.retirementReceiveAge, 65);
+    let plannedAnnualWithdrawal = null;
 
-    const baseLiving = Math.max(0, num(data.living.baseAnnual, 0));
+    const baseLiving = Math.max(0, num(data.living.baseMonthly, num(data.living.baseAnnual, 0) / 12)) * 12;
     const otherAnnualBase = Math.max(0, num(data.living.otherAnnual, 0));
     const insuranceAnnual = Math.max(0, num(data.insurance.annualPremium, 0));
     const insuranceEndAge = int(data.insurance.premiumEndAge, self.retireAge);
 
     const rows = [];
     const events = [];
+    let firstCashShortfallAge = null;
     let firstLiquidShortfallAge = null;
     let firstTotalShortfallAge = null;
+    let firstPlannedWithdrawalAge = null;
+    let firstEmergencyWithdrawalAge = null;
+    let minCash = cash;
+    let minCashAge = selfAge0;
     let minLiquid = cash + investment;
     let minLiquidAge = selfAge0;
     let maxAnnualDeficit = 0;
     let maxAnnualDeficitAge = null;
+    let maxReconciliationGap = 0;
 
-    // 現在時点スナップショット。年次収支はまだ反映しない。
     rows.push({
       index: 0,
       year: currentYear,
       selfAge: selfAge0,
       spouseAge: spouseAge0,
+      openingCash: round(cash),
+      openingInvestment: round(investment),
+      openingRetirement: round(retirement),
+      openingTotalFinancialAssets: round(initialFinancialAssets),
       income: 0,
       expense: 0,
       annualBalance: 0,
+      cashChange: 0,
+      plannedInvestmentWithdrawal: 0,
+      emergencyInvestmentWithdrawal: 0,
+      investmentWithdrawal: 0,
       cash: round(cash),
       investment: round(investment),
       retirement: round(retirement),
       liquidAssets: round(cash + investment),
-      totalFinancialAssets: round(cash + investment + retirement),
-      cumulativeShortfall: 0,
+      totalFinancialAssets: round(initialFinancialAssets),
+      cashShortfall: round(Math.max(0, -cash)),
+      totalShortfall: round(Math.max(0, -initialFinancialAssets)),
+      reconciliationGap: 0,
       mortgageBalance: 0,
       isSnapshot: true
     });
@@ -355,16 +456,23 @@
       const spouseAge = hasSpouse ? spouseAge0 + idx : null;
       const inflationFactor = (1 + inflationRate) ** idx;
 
-      let investmentReturnAmount = investment * investReturn;
-      let retirementReturnAmount = retirement * retirementReturn;
-      investment += investmentReturnAmount;
-      retirement += retirementReturnAmount;
+      const openingCash = cash;
+      const openingInvestment = investment;
+      const openingRetirement = retirement;
+      const openingTotalFinancialAssets = openingCash + openingInvestment + openingRetirement;
 
+      const distributionWithoutGrowth = (withdrawalMethod === 'equal' || withdrawalMethod === 'lump') && selfAge >= withdrawalStartAge;
+      const investmentReturnAmount = distributionWithoutGrowth ? 0 : openingInvestment * investReturn;
+      const retirementReturnAmount = openingRetirement * retirementReturn;
+      investment = openingInvestment + investmentReturnAmount;
+      retirement = openingRetirement + retirementReturnAmount;
+
+      let retirementRelease = 0;
       if (!retirementReleased && selfAge >= retirementReceiveAge && retirement > 0) {
-        cash += retirement;
-        events.push({ year, age: selfAge, type: 'retirement-release', label: 'DC・iDeCo等を現金化', amount: round(retirement) });
+        retirementRelease = retirement;
         retirement = 0;
         retirementReleased = true;
+        events.push({ year, age: selfAge, type: 'retirement-release', label: 'DC・iDeCo等を現預金へ移転', amount: round(retirementRelease) });
       }
 
       const selfEmployment = netAtAge(self, selfAge0, selfAge);
@@ -386,7 +494,11 @@
         events.push({ year, age: selfAge, type: ev.kind || 'expense', label: ev.label || 'ライフイベント', amount: round(amount) });
       }
 
-      const totalIncome = selfEmployment + spouseEmployment + selfPension + spousePension + selfOther + spouseOther + selfSeverance + spouseSeverance + oneTimeIncome;
+      const employmentIncome = selfEmployment + spouseEmployment;
+      const pensionIncome = selfPension + spousePension;
+      const severanceIncome = selfSeverance + spouseSeverance;
+      const otherIncome = selfOther + spouseOther + oneTimeIncome;
+      const totalIncome = employmentIncome + pensionIncome + severanceIncome + otherIncome;
 
       let childLivingAdjustment = 0;
       let education = 0;
@@ -433,48 +545,67 @@
         else housingExpense += Math.max(0, num(data.housing.currentAnnualAfterEnd, 0)) * inflationFactor;
       }
 
-      const investContribution = selfAge <= investEndAge ? annualInvestContribution : 0;
+      const investContribution = selfAge >= investStartAge && selfAge <= effectiveInvestEndAge ? annualInvestContribution : 0;
       const retirementContribution = selfAge <= retirementContributionEndAge && selfAge < retirementReceiveAge ? annualRetirementContribution : 0;
       const totalExpense = livingExpense + otherAnnual + education + housingExpense + insurance + oneTimeExpense + homeUpfront;
-      const annualBalanceBeforeContributions = totalIncome - totalExpense;
-      let cashFlowAfterContributions = annualBalanceBeforeContributions - investContribution - retirementContribution;
+      const householdBalance = totalIncome - totalExpense;
 
-      cash += cashFlowAfterContributions;
       investment += investContribution;
       retirement += retirementContribution;
 
-      let investmentWithdrawal = 0;
-      let retirementWithdrawal = 0;
-      let annualShortfall = 0;
-      if (cash < -EPS) {
-        let need = -cash;
-        investmentWithdrawal = Math.min(investment, need);
-        investment -= investmentWithdrawal;
-        cash += investmentWithdrawal;
-        need = Math.max(0, -cash);
-        if (need > EPS && selfAge >= retirementReceiveAge) {
-          retirementWithdrawal = Math.min(retirement, need);
-          retirement -= retirementWithdrawal;
-          cash += retirementWithdrawal;
+      let plannedInvestmentWithdrawal = 0;
+      if (selfAge >= withdrawalStartAge && investment > EPS) {
+        const installmentNumber = selfAge - withdrawalStartAge + 1;
+        if (firstPlannedWithdrawalAge === null) {
+          firstPlannedWithdrawalAge = selfAge;
+          events.push({ year, age: selfAge, type: 'investment-withdrawal-start', label: 'NISA等の計画的な取り崩し開始', amount: 0 });
         }
-        if (cash < -EPS) {
-          annualShortfall = -cash;
-          cumulativeShortfall += annualShortfall;
-          cash = 0;
-          if (firstTotalShortfallAge === null) firstTotalShortfallAge = selfAge;
+        if (withdrawalMethod === 'lump' && selfAge === withdrawalStartAge) {
+          plannedInvestmentWithdrawal = investment;
+        } else if (withdrawalMethod !== 'lump' && installmentNumber <= withdrawalYears) {
+          if (plannedAnnualWithdrawal === null) {
+            const principalAtStart = openingInvestment;
+            plannedAnnualWithdrawal = withdrawalMethod === 'equal'
+              ? principalAtStart / withdrawalYears
+              : annuityWithdrawal(principalAtStart, investReturn, withdrawalYears);
+          }
+          plannedInvestmentWithdrawal = installmentNumber === withdrawalYears
+            ? investment
+            : Math.min(investment, Math.max(0, plannedAnnualWithdrawal));
+        }
+      }
+      plannedInvestmentWithdrawal = Math.min(investment, Math.max(0, plannedInvestmentWithdrawal));
+      investment -= plannedInvestmentWithdrawal;
+
+      let cashBeforeEmergency = openingCash + householdBalance - investContribution - retirementContribution + retirementRelease + plannedInvestmentWithdrawal;
+      let emergencyInvestmentWithdrawal = 0;
+      if (autoEmergencyWithdrawal && cashBeforeEmergency < -EPS && investment > EPS) {
+        emergencyInvestmentWithdrawal = Math.min(-cashBeforeEmergency, investment);
+        investment -= emergencyInvestmentWithdrawal;
+        cashBeforeEmergency += emergencyInvestmentWithdrawal;
+        if (firstEmergencyWithdrawalAge === null) {
+          firstEmergencyWithdrawalAge = selfAge;
+          events.push({ year, age: selfAge, type: 'investment-emergency-withdrawal', label: 'NISA等の臨時取り崩し開始', amount: round(emergencyInvestmentWithdrawal) });
         }
       }
 
+      cash = cashBeforeEmergency;
+      const investmentWithdrawal = plannedInvestmentWithdrawal + emergencyInvestmentWithdrawal;
+      const cashChange = cash - openingCash;
+
       const liquid = cash + investment;
       const totalFinancialAssets = liquid + retirement;
-      if (liquid <= EPS && firstLiquidShortfallAge === null) firstLiquidShortfallAge = selfAge;
-      if (liquid < minLiquid) {
-        minLiquid = liquid;
-        minLiquidAge = selfAge;
-      }
-      const annualBalance = cashFlowAfterContributions;
-      if (annualBalance < maxAnnualDeficit) {
-        maxAnnualDeficit = annualBalance;
+      const expectedTotal = openingTotalFinancialAssets + totalIncome - totalExpense + investmentReturnAmount + retirementReturnAmount;
+      const reconciliationGap = totalFinancialAssets - expectedTotal;
+      maxReconciliationGap = Math.max(maxReconciliationGap, Math.abs(reconciliationGap));
+
+      if (cash < -EPS && firstCashShortfallAge === null) firstCashShortfallAge = selfAge;
+      if (liquid < -EPS && firstLiquidShortfallAge === null) firstLiquidShortfallAge = selfAge;
+      if (totalFinancialAssets < -EPS && firstTotalShortfallAge === null) firstTotalShortfallAge = selfAge;
+      if (cash < minCash) { minCash = cash; minCashAge = selfAge; }
+      if (liquid < minLiquid) { minLiquid = liquid; minLiquidAge = selfAge; }
+      if (householdBalance < maxAnnualDeficit) {
+        maxAnnualDeficit = householdBalance;
         maxAnnualDeficitAge = selfAge;
       }
 
@@ -483,11 +614,15 @@
         year,
         selfAge,
         spouseAge,
+        openingCash: round(openingCash),
+        openingInvestment: round(openingInvestment),
+        openingRetirement: round(openingRetirement),
+        openingTotalFinancialAssets: round(openingTotalFinancialAssets),
         income: round(totalIncome),
-        employmentIncome: round(selfEmployment + spouseEmployment),
-        pensionIncome: round(selfPension + spousePension),
-        severanceIncome: round(selfSeverance + spouseSeverance),
-        otherIncome: round(selfOther + spouseOther + oneTimeIncome),
+        employmentIncome: round(employmentIncome),
+        pensionIncome: round(pensionIncome),
+        severanceIncome: round(severanceIncome),
+        otherIncome: round(otherIncome),
         expense: round(totalExpense),
         livingExpense: round(livingExpense),
         childLivingAdjustment: round(childLivingAdjustment),
@@ -500,34 +635,43 @@
         homeUpfront: round(homeUpfront),
         investmentContribution: round(investContribution),
         retirementContribution: round(retirementContribution),
-        annualBalance: round(annualBalance),
-        basicBalance: round(annualBalanceBeforeContributions),
-        cashFlowAfterContributions: round(cashFlowAfterContributions),
+        retirementRelease: round(retirementRelease),
+        plannedInvestmentWithdrawal: round(plannedInvestmentWithdrawal),
+        emergencyInvestmentWithdrawal: round(emergencyInvestmentWithdrawal),
+        investmentWithdrawal: round(investmentWithdrawal),
+        annualBalance: round(householdBalance),
+        basicBalance: round(householdBalance),
+        cashChange: round(cashChange),
         investmentReturn: round(investmentReturnAmount),
         retirementReturn: round(retirementReturnAmount),
-        investmentWithdrawal: round(investmentWithdrawal),
-        retirementWithdrawal: round(retirementWithdrawal),
-        annualShortfall: round(annualShortfall),
-        cumulativeShortfall: round(cumulativeShortfall),
+        totalReturn: round(investmentReturnAmount + retirementReturnAmount),
         cash: round(cash),
         investment: round(investment),
         retirement: round(retirement),
         liquidAssets: round(liquid),
         totalFinancialAssets: round(totalFinancialAssets),
+        cashShortfall: round(Math.max(0, -cash)),
+        totalShortfall: round(Math.max(0, -totalFinancialAssets)),
+        cumulativeShortfall: round(Math.max(0, -cash)),
+        reconciliationGap: round(reconciliationGap, 6),
         mortgageBalance: round(mortgage ? mortgage.balance : 0),
         isSnapshot: false
       });
     }
 
-    const currentNetIncome = netAtAge(self, selfAge0, selfAge0) + (spouse ? netAtAge(spouse, spouseAge0, spouseAge0) : 0) + (selfAge0 <= self.otherIncomeEndAge ? self.otherAnnual : 0) + (spouse && spouseAge0 <= spouse.otherIncomeEndAge ? spouse.otherAnnual : 0);
+    const currentNetIncome = netAtAge(self, selfAge0, selfAge0)
+      + (spouse ? netAtAge(spouse, spouseAge0, spouseAge0) : 0)
+      + (selfAge0 <= self.otherIncomeEndAge ? self.otherAnnual : 0)
+      + (spouse && spouseAge0 <= spouse.otherIncomeEndAge ? spouse.otherAnnual : 0);
     const currentEducation = children.reduce((sum, child) => sum + Math.max(0, num(child.currentEducation, 0)), 0);
     const currentHousing = Math.max(0, num(data.housing.monthlyCost, 0)) * 12;
     const currentInsurance = selfAge0 <= insuranceEndAge ? insuranceAnnual : 0;
-    const currentInvest = selfAge0 <= investEndAge ? annualInvestContribution : 0;
-    const currentRetirementContribution = selfAge0 <= retirementContributionEndAge ? annualRetirementContribution : 0;
+    const currentInvest = selfAge0 >= investStartAge && selfAge0 <= effectiveInvestEndAge ? annualInvestContribution : 0;
+    const currentRetirementContribution = selfAge0 <= retirementContributionEndAge && selfAge0 < retirementReceiveAge ? annualRetirementContribution : 0;
     const currentOther = otherAnnualBase;
     const currentExpense = baseLiving + currentEducation + currentHousing + currentInsurance + currentOther;
-    const currentBalance = currentNetIncome - currentExpense - currentInvest - currentRetirementContribution;
+    const currentHouseholdBalance = currentNetIncome - currentExpense;
+    const currentCashChange = currentHouseholdBalance - currentInvest - currentRetirementContribution;
     const emergencyFund = (baseLiving + currentHousing + currentInsurance + currentOther) / 2;
 
     const retirementRow = rows.find((r) => r.selfAge === self.retireAge) || rows[rows.length - 1];
@@ -537,27 +681,33 @@
 
     const warnings = [];
     if (firstTotalShortfallAge !== null) {
-      warnings.push({ level: 'danger', code: 'SHORTFALL', title: `${firstTotalShortfallAge}歳で資金不足`, detail: '現預金・運用資産・受取可能な退職資産を使っても支出を賄えない年があります。' });
+      warnings.push({ level: 'danger', code: 'TOTAL_SHORTFALL', title: `${firstTotalShortfallAge}歳で純金融資産がマイナス`, detail: '現預金と換金可能な運用資産を使い切っても不足し、DC等の残高を含めた純金融資産もマイナスになります。' });
     } else if (firstLiquidShortfallAge !== null) {
-      warnings.push({ level: 'warn', code: 'LIQUIDITY', title: `${firstLiquidShortfallAge}歳で流動資産が枯渇`, detail: 'DC・iDeCo等が残っていても、受取前に使えるお金が不足する可能性があります。' });
+      warnings.push({ level: 'danger', code: 'LIQUID_SHORTFALL', title: `${firstLiquidShortfallAge}歳で利用可能資産が不足`, detail: '現預金とNISA等を使い切っても不足します。DC等の受取時期または支出計画を確認してください。' });
     }
-    if (minLiquid < emergencyFund && firstTotalShortfallAge === null) {
-      warnings.push({ level: 'warn', code: 'EMERGENCY', title: '生活防衛資金を下回る時期あり', detail: `流動資産の最低額は${round(minLiquid)}万円（${minLiquidAge}歳）、目安は約${round(emergencyFund)}万円です。` });
+    if (firstEmergencyWithdrawalAge !== null) {
+      warnings.push({ level: 'warn', code: 'EMERGENCY_WITHDRAWAL', title: `${firstEmergencyWithdrawalAge}歳から計画外の取り崩し`, detail: '現預金不足を補うため、設定した受取開始前または計画額を超えてNISA等を取り崩しています。' });
     }
-    if (currentBalance < 0) {
-      warnings.push({ level: 'warn', code: 'CURRENT_DEFICIT', title: '現在の年間収支が赤字', detail: `現在の入力では、積立を含め年間約${round(Math.abs(currentBalance))}万円の不足です。` });
+    if (minCash < emergencyFund && firstTotalShortfallAge === null) {
+      warnings.push({ level: 'warn', code: 'EMERGENCY', title: '生活防衛資金を下回る時期あり', detail: `現預金の最低額は${round(minCash)}万円（${minCashAge}歳）、目安は約${round(emergencyFund)}万円です。` });
+    }
+    if (currentCashChange < 0) {
+      warnings.push({ level: 'warn', code: 'CURRENT_CASH_DEFICIT', title: '現在の積立後の現金増減がマイナス', detail: `現在の入力では、積立を含めると年間約${round(Math.abs(currentCashChange))}万円を既存資産から補う計画です。` });
     }
     if (housingBurden !== null && housingBurden > 30) {
       warnings.push({ level: 'warn', code: 'HOUSING', title: '購入年の住居費負担が高め', detail: `購入年の住居費は手取り収入の約${round(housingBurden)}％です。維持費を含むため、購入前後の現預金も確認してください。` });
     }
-    if (rows.some((r) => !r.isSnapshot && r.investmentContribution > 0 && r.investmentWithdrawal > 0)) {
-      warnings.push({ level: 'warn', code: 'CONTRIBUTE_WITHDRAW', title: '積立と取崩しが同じ年に発生', detail: '計画した積立額を維持するために運用資産を取り崩す年があります。積立額か支出条件を見直してください。' });
+    if (withdrawalStartAge <= investEndAge) {
+      warnings.push({ level: 'warn', code: 'INVEST_OVERLAP', title: '積立期間と取り崩し時期が重複', detail: '計算上は取り崩し開始の前年でNISA等の積立を停止しています。入力期間を確認してください。' });
     }
     if (data.income.self && !num(data.income.self.net, 0)) {
       warnings.push({ level: 'info', code: 'NET_ESTIMATE', title: '本人の手取りは概算', detail: '手取り年収を入力すると、税・社会保険の個人差によるズレを抑えられます。' });
     }
     if (hasSpouse && data.income.spouse && num(data.income.spouse.gross, 0) > 0 && !num(data.income.spouse.net, 0)) {
       warnings.push({ level: 'info', code: 'SPOUSE_NET_ESTIMATE', title: '配偶者の手取りは概算', detail: '配偶者の手取り年収を入力すると精度が上がります。' });
+    }
+    if (maxReconciliationGap > 0.01) {
+      warnings.push({ level: 'danger', code: 'RECONCILIATION', title: 'キャッシュフローの検算差額あり', detail: `最大差額は${round(maxReconciliationGap, 3)}万円です。入力ではなく計算処理の確認が必要です。` });
     }
 
     return {
@@ -571,29 +721,40 @@
         investReturnPct: round(investReturn * 100, 2),
         retirementReturnPct: round(retirementReturn * 100, 2),
         timing: '現在時点を0年目とし、各年齢になる年の年間収支を年末残高へ反映',
-        assetScope: '住宅資産価値は含めず、金融資産のみを表示',
-        taxScope: '所得税・住民税・社会保険料・退職所得税は概算または未反映'
+        assetScope: '住宅資産価値は含めず、現預金不足時はNISA等を必要額だけ自動で取り崩す',
+        taxScope: '所得税・住民税・社会保険料・退職所得税は概算または未反映',
+        reconciliation: '期末総金融資産＝期首総金融資産＋収入－支出＋運用収益',
+        withdrawal: withdrawalMethod === 'lump' ? `${withdrawalStartAge}歳にNISA等を一括取り崩し` : `${withdrawalStartAge}歳から${withdrawalYears}年間、${withdrawalMethod === 'equal' ? '運用を止めて均等' : '運用しながら定額'}取り崩し`
       },
       current: {
         netIncome: round(currentNetIncome),
         expense: round(currentExpense),
         contributions: round(currentInvest + currentRetirementContribution),
-        annualBalance: round(currentBalance),
+        annualBalance: round(currentHouseholdBalance),
+        cashChange: round(currentCashChange),
         education: round(currentEducation),
         housing: round(currentHousing),
         emergencyFund: round(emergencyFund),
         financialAssets: round(initialFinancialAssets)
       },
       metrics: {
+        firstCashShortfallAge,
         firstLiquidShortfallAge,
         firstTotalShortfallAge,
+        firstPlannedWithdrawalAge,
+        firstEmergencyWithdrawalAge,
+        minCash: round(minCash),
+        minCashAge,
         minLiquid: round(minLiquid),
         minLiquidAge,
         maxAnnualDeficit: round(maxAnnualDeficit),
         maxAnnualDeficitAge,
+        maxReconciliationGap: round(maxReconciliationGap, 6),
         retirementAssets: retirementRow ? retirementRow.totalFinancialAssets : null,
         finalAssets: finalRow.totalFinancialAssets,
-        cumulativeShortfall: finalRow.cumulativeShortfall,
+        finalCash: finalRow.cash,
+        finalCashShortfall: finalRow.cashShortfall,
+        cumulativeShortfall: finalRow.cashShortfall,
         housingBurdenPct: housingBurden === null ? null : round(housingBurden),
         mortgageTotalInterest: mortgage ? round(mortgage.totalInterest) : 0
       },
@@ -609,9 +770,14 @@
     SCHOOL_COST,
     AWAY_FROM_HOME_ADD,
     defaultData,
+    normalizeData,
+    normalizePerson,
     estimateNetIncome,
     pensionFactor,
     monthlyPayment,
+    mortgagePreview,
+    annuityWithdrawal,
+    investmentPlanPreview,
     grossAtAge,
     netAtAge,
     educationCostCurrentValue,
