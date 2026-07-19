@@ -194,3 +194,65 @@ tr.event-row td:first-child{color:var(--navy-700);font-weight:800}
   body{background:white}.app-header,.sidebar,.header-actions,.results-header .header-actions,.table-tools,.no-print{display:none!important}
   .results-header{background:white!important;color:var(--ink);padding:0 0 20px}.results-title p{color:var(--muted)}.results-main{margin:0}.container{width:100%}.metric-grid{grid-template-columns:repeat(4,1fr)}.result-layout{display:block}.result-panel,.metric{box-shadow:none;break-inside:avoid;margin-bottom:12px}.table-scroll{max-height:none;overflow:visible}th{position:static}.chart-wrap{height:300px}
 }
+
+/* v1.1 input clarity */
+.subsection-card,.income-curve-card{border:1px solid var(--line);border-radius:16px;padding:18px;background:#fbfcfe;margin-top:14px}
+.subsection-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px}
+.subsection-head strong{display:block;color:var(--navy-900);font-size:.94rem}
+.subsection-head p{margin:4px 0 0;color:var(--muted);font-size:.77rem;line-height:1.45}
+.count-badge{background:#eaf5ff;color:var(--navy-700);border-radius:999px;padding:5px 9px;font-size:.72rem;font-weight:850;white-space:nowrap}
+.curve-sentence{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:14px;border-radius:13px;background:white;border:1px solid #d8e2ee;color:#415069;font-size:.88rem;font-weight:720}
+.inline-field{display:inline-flex;align-items:center;border:1px solid #bfcddd;border-radius:10px;background:white;overflow:hidden;vertical-align:middle}
+.inline-field:focus-within{border-color:var(--blue-500);box-shadow:0 0 0 3px rgba(55,136,246,.12)}
+.inline-field input{width:88px;border:0;outline:0;padding:9px 8px;text-align:right;font-weight:850;color:var(--navy-950);background:transparent}
+.inline-field span{padding:0 9px 0 2px;color:var(--muted);font-size:.78rem;white-space:nowrap}
+.income-preview{height:180px;margin-top:13px;background:white;border:1px solid #e2e9f1;border-radius:13px;padding:6px}
+.income-summary{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.income-summary span{display:flex;gap:6px;align-items:center;background:#edf4fb;border-radius:999px;padding:6px 9px;color:#526277;font-size:.72rem}
+.income-summary b{color:var(--navy-800)}
+.income-overrides .repeat-list{gap:8px}
+.income-change-row{display:flex;align-items:center;gap:12px;justify-content:space-between;border:1px solid #dfe7f0;border-radius:12px;background:white;padding:10px 11px}
+.change-sentence{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:#46556b;font-size:.84rem;font-weight:700}
+.conversion-strip{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;padding:13px 15px;border:1px solid #cfe0f2;background:#f3f9ff;border-radius:13px;color:#5a6a7e;font-size:.82rem}
+.conversion-strip strong{color:var(--navy-900);font-size:1rem}
+.mortgage-preview{margin-top:18px;padding:17px;border-radius:15px;background:linear-gradient(135deg,#f2f8ff,#fbfdff);border:1px solid #cadef4}
+.mortgage-preview-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.mortgage-preview-grid>div{background:white;border:1px solid #dce7f2;border-radius:12px;padding:12px;display:grid;gap:4px}
+.mortgage-preview-grid span{font-size:.72rem;color:var(--muted)}
+.mortgage-preview-grid strong{font-size:1rem;color:var(--navy-950);letter-spacing:-.02em}
+
+/* v1.1 results and audit trail */
+.panel-title-row{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:8px}
+.panel-title-row h2{margin-bottom:4px}
+.panel-title-row p,.table-sub{margin:0;color:var(--muted);font-size:.76rem;line-height:1.45}
+.legend i.legend-block{width:14px;height:10px;border-radius:2px}
+.legend i.legend-line{width:20px;height:3px;border-radius:3px}
+.legend-block.cash{background:#6eb7ff}.legend-block.investment{background:#0a3474}.legend-block.retirement{background:#8aa0bb}.legend-block.negative-cash{background:#ae2f38}.legend-block.positive{background:#157f5b}.legend-line.total{background:#17263a}
+.table-options{display:flex;gap:8px;flex-wrap:wrap}
+.reconcile-formula{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#f4f8fc;border:1px solid #dbe5ef;border-radius:12px;padding:10px 12px;margin:10px 0 12px;font-size:.76rem;color:#596a80}
+.reconcile-formula strong{color:var(--navy-900)}
+.ok-badge{margin-left:auto;border-radius:999px;background:var(--good-bg);color:var(--good);font-weight:850;padding:5px 9px}
+.cf-table th:nth-child(1),.cf-table td:nth-child(1){min-width:86px}
+.cf-table th:nth-child(2),.cf-table td:nth-child(2){text-align:left;min-width:150px;max-width:220px;white-space:normal}
+.cf-table td.event-cell{font-size:.72rem;color:#54677f}
+.cf-table tr.cash-negative td{background:#fff8f8}
+.cf-table tr.total-negative td{background:#fff0f1}
+.cf-table td.strong-negative,.num-negative{color:var(--danger);font-weight:850}
+.num-positive{color:var(--good);font-weight:800}
+.verify-ok{display:inline-block;border-radius:999px;padding:3px 7px;background:var(--good-bg);color:var(--good);font-weight:850}
+.verify-ng{display:inline-block;border-radius:999px;padding:3px 7px;background:var(--danger-bg);color:var(--danger);font-weight:850}
+.cf-table.detail{font-size:.72rem}
+
+@media(max-width:900px){
+  .mortgage-preview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:620px){
+  .subsection-card,.income-curve-card{padding:14px}
+  .curve-sentence{align-items:flex-start}
+  .inline-field input{width:72px}
+  .income-change-row{align-items:flex-start}
+  .mortgage-preview-grid{grid-template-columns:1fr 1fr}
+  .table-options{width:100%}.table-options .choice{flex:1;justify-content:center}
+  .reconcile-formula .ok-badge{margin-left:0}
+}
+.result-layout>.result-stack,.result-layout>aside,.result-panel,.table-scroll{min-width:0;max-width:100%}
