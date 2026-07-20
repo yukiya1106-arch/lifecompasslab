@@ -47,6 +47,13 @@
     if (!['lump','equal','annuity'].includes(copy.assets.withdrawalMethod)) copy.assets.withdrawalMethod = 'annuity';
     if (!copy.assets.withdrawalYears) copy.assets.withdrawalYears = 20;
     copy.assets.autoEmergencyWithdrawal = true;
+    copy.housing = copy.housing || {};
+    if (copy.housing.currentType === 'owner') {
+      copy.housing.currentType = n(copy.housing.currentMortgageBalance) > 0 ? 'ownerLoan' : 'ownerNoLoan';
+      if (copy.housing.currentOwnerMonthlyCost == null || copy.housing.currentOwnerMonthlyCost === '') copy.housing.currentOwnerMonthlyCost = n(copy.housing.monthlyCost);
+    }
+    if (!['rent','ownerLoan','ownerNoLoan','family'].includes(copy.housing.currentType)) copy.housing.currentType = 'rent';
+    if (!['sell','retain','undecided'].includes(copy.housing.currentHomeDisposition)) copy.housing.currentHomeDisposition = 'sell';
     copy.meta = copy.meta || {};
     copy.meta.version = E.VERSION;
     return copy;
@@ -145,8 +152,10 @@
     return `<header class="app-header"><div class="container header-inner">
       <button class="brand" data-action="landing" aria-label="トップへ"><img src="assets/compass-logo.png" alt=""><span>COMPASS PLAN <small>light</small></span></button>
       <div class="header-actions">
+        <button class="btn btn-ghost btn-small hide-mobile" data-action="load-json">データ読込</button>
         <button class="btn btn-ghost btn-small hide-mobile" data-action="save-json">入力データ保存</button>
         <button class="btn btn-ghost btn-small" data-action="reset">リセット</button>
+        <input id="json-file-input" type="file" accept="application/json,.json" hidden>
       </div>
     </div></header>`;
   }
@@ -162,6 +171,8 @@
           <button class="btn btn-primary" data-action="new">新しく作成する →</button>
           ${hasSaved ? '<button class="btn btn-light" data-action="resume">前回の続きから</button>' : ''}
           <button class="btn btn-outline" style="color:white;border-color:rgba(255,255,255,.45)" data-action="sample">サンプルを見る</button>
+          <button class="btn btn-outline" style="color:white;border-color:rgba(255,255,255,.45)" data-action="load-json">保存データを読み込む</button>
+          <input id="json-file-input" type="file" accept="application/json,.json" hidden>
         </div>
         <div class="hero-note">入力内容はこの端末内にのみ保存され、外部には送信されません。</div>
       </div>
@@ -252,7 +263,7 @@
       </div>
       <div class="subsection-card"><div class="subsection-head"><div><strong>退職・年金</strong><p>就業終了後は給与を0円とし、設定した年齢から年金を計上します。</p></div></div>
         <div class="form-grid three">
-          ${field(`income.${key}.retireAge`,'就業終了年齢',p.retireAge||65,'歳',{min:baseAge+1,max:85})}
+          ${field(`income.${key}.retireAge`,'就業終了年齢',p.retireAge||65,'歳',{min:18,max:85,hint:'すでに退職済みの場合は、現在年齢以前を入力し、現在の額面年収を0円にしてください。'})}
           ${field(`income.${key}.pensionStartAge`,'年金受給開始',p.pensionStartAge||65,'歳',{min:60,max:75})}
           ${field(`income.${key}.pensionMonthly65`,'65歳基準の年金月額',p.pensionMonthly65||0,'万円/月',{min:0,max:100,step:.1,optional:true})}
           ${field(`income.${key}.severance`,'退職金',p.severance||0,'万円',{min:0,max:50000,optional:true,hint:'税引前の概算。税金は本ライト版では未反映です。'})}
@@ -276,7 +287,7 @@
         ${field('living.baseMonthly','毎月の基本生活費',monthly,'万円/月',{min:0,max:300,step:.1,hint:'食費・光熱費・通信費・日用品・小遣い等。現在いるお子さまの日常生活費を含めます。'})}
         ${field('living.otherAnnual','その他の年間支出',l.otherAnnual||0,'万円/年',{min:0,max:3000,hint:'旅行、車検、冠婚葬祭など、毎月の生活費に含めない支出。'})}
         ${field('meta.inflationRate','物価上昇率',m.inflationRate,'%/年',{min:-3,max:10,step:.1,hint:'基本生活費・教育費・住居維持費などに反映します。'})}
-        ${field('meta.horizonAge','計算終了年齢',m.horizonAge||90,'歳',{min:n(state.family.selfAge,35)+1,max:110})}
+        ${field('meta.horizonAge','計算終了年齢',m.horizonAge||90,'歳',{min:Math.max(n(state.family.selfAge,35),bool(state.family.hasSpouse)?n(state.family.spouseAge,35):0)+1,max:110,hint:'本人・配偶者のいずれも、この年齢に達するまで計算します。年下の配偶者がいる場合は本人側の年齢を自動延長します。'})}
         ${toggleField('living.inflateOther','その他の年間支出にも物価上昇を反映',l.inflateOther)}
         ${toggleField('living.childLivingAdjust','子どもの成長・独立による生活費変化を反映',l.childLivingAdjust,'現在いる子は現在との差分だけ、将来予定の子は誕生後の概算額を加算します。')}
       </div>
@@ -285,7 +296,24 @@
   }
 
   function investmentPreviewMarkup() {
-    const p = E.investmentPlanPreview(state.assets, n(state.family.selfAge, 35));
+    const simple = E.investmentPlanPreview(state.assets, n(state.family.selfAge, 35));
+    let p = simple;
+    let scenarioNote = '入力済みの家計・住宅・教育費を反映した想定です。';
+    try {
+      const projected = E.project(state);
+      const startRow = projected.rows.find(r => !r.isSnapshot && r.selfAge === simple.withdrawalStartAge);
+      if (startRow) {
+        const actualAnnual = n(startRow.plannedInvestmentWithdrawal, simple.annualWithdrawal);
+        p = Object.assign({}, simple, {
+          projectedBalance: n(startRow.openingInvestment),
+          annualWithdrawal: actualAnnual,
+          monthlyWithdrawal: actualAnnual / 12
+        });
+        if (projected.metrics.firstEmergencyWithdrawalAge != null && projected.metrics.firstEmergencyWithdrawalAge < simple.withdrawalStartAge) {
+          scenarioNote = `${projected.metrics.firstEmergencyWithdrawalAge}歳から臨時取り崩しが発生するため、受取開始時残高は家計条件を反映して減少しています。`;
+        }
+      }
+    } catch (_) { scenarioNote = '現在残高・積立期間・想定利回りからの概算です。'; }
     const methodLabel = p.method === 'lump' ? '一括受取' : p.method === 'equal' ? '分割受取（運用なし）' : '分割受取（運用継続）';
     return `<div class="mortgage-preview-grid investment-preview-grid">
       <div><span>取崩し開始時の想定残高</span><strong>${formatWan(p.projectedBalance,1)}</strong></div>
@@ -294,7 +322,7 @@
       <div><span>想定月額</span><strong>${formatWan(p.monthlyWithdrawal,2)}</strong></div>
       <div><span>受取開始</span><strong>${p.withdrawalStartAge}歳</strong></div>
       <div><span>想定終了</span><strong>${p.endAge}歳ごろ</strong></div>
-    </div><div class="source-note">現在残高・積立期間・想定利回りからの概算です。実際の運用成果は変動します。現預金が不足した場合は、設定時期より前でもNISA等から必要額だけ臨時に取り崩します。</div>`;
+    </div><div class="source-note">${esc(scenarioNote)} 実際の運用成果は変動します。現預金が不足した場合は、設定時期より前でもNISA等から必要額だけ臨時に取り崩します。</div>`;
   }
 
   function assetsStep() {
@@ -314,7 +342,7 @@
         ${field('assets.investmentEndAge','積立終了年齢',a.investmentEndAge,'歳',{min:currentAge,max:90})}
       </div></section>
       <section class="section"><h3>受取・取り崩し</h3><div class="form-grid three">
-        ${field('assets.withdrawalStartAge','取り崩し開始年齢',a.withdrawalStartAge,'歳',{min:currentAge+1,max:110,hint:'積立終了後の年齢を設定してください。'})}
+        ${field('assets.withdrawalStartAge','取り崩し開始年齢',a.withdrawalStartAge,'歳',{min:currentAge,max:110,hint:'積立終了後の年齢を設定してください。現在年齢から受け取る場合も設定できます。'})}
         ${selectField('assets.withdrawalMethod','受取方法',a.withdrawalMethod||'annuity',[["lump","一括で受け取る"],["equal","分割して受け取る（運用なし）"],["annuity","運用しながら分割して受け取る"]])}
         ${split?field('assets.withdrawalYears','受取期間',a.withdrawalYears||20,'年',{min:1,max:50,hint:'開始年を1年目として、指定年数で残高を取り崩します。'}):''}
       </div><div class="mortgage-preview" id="investment-preview">${investmentPreviewMarkup()}</div></section>
@@ -325,6 +353,35 @@
         ${field('assets.retirementReceiveAge','DC等の受取年齢',a.retirementReceiveAge,'歳',{min:55,max:75,hint:'受取年に全額を現預金へ移す簡易計算です。税金は未反映です。'})}
       </div></section>
       <div class="info-box"><strong>資金不足時の扱い：</strong>家計赤字で現預金が不足した場合は、NISA等の換金可能な運用資産から必要額だけ自動で補填します。NISA等も使い切った後に初めて、赤い「資金不足」として表示します。DC・iDeCo等は設定した受取年齢までは補填に使いません。</div>`;
+  }
+
+  function currentMortgagePreviewMarkup() {
+    const h = state.housing;
+    if (h.currentType !== 'ownerLoan') return '';
+    const p = E.existingMortgagePreview(h, state.family.selfAge);
+    return `<div class="mortgage-preview-grid">
+      <div><span>現在のローン残高</span><strong>${formatWan(p.balance,1)}</strong></div>
+      <div><span>毎月返済額</span><strong>${formatWan(p.monthlyPayment,2)}</strong></div>
+      <div><span>年間返済額</span><strong>${formatWan(p.annualPayment,1)}</strong></div>
+      <div><span>残り総返済額</span><strong>${formatWan(p.totalPayment,1)}</strong></div>
+      <div><span>今後の利息</span><strong>${formatWan(p.totalInterest,1)}</strong></div>
+      <div><span>完済時期</span><strong>${p.completionAge}歳ごろ</strong></div>
+    </div><div class="source-note">現在残高・金利・残り期間から、元利均等返済・ボーナス返済なしで再計算した概算です。</div>`;
+  }
+
+  function homeSalePreviewMarkup() {
+    const h = state.housing;
+    const owned = h.currentType === 'ownerLoan' || h.currentType === 'ownerNoLoan';
+    if (!owned || !bool(h.purchasePlan) || h.currentHomeDisposition !== 'sell') return '';
+    const p = E.homeSalePreview(h, state.family.selfAge);
+    const netLabel = p.netProceeds >= 0 ? '売却後の手取り' : '売却時の追加資金';
+    const netValue = p.netProceeds >= 0 ? formatWan(p.netProceeds,1) : formatWan(Math.abs(p.netProceeds),1);
+    return `<div class="mortgage-preview-grid">
+      <div><span>想定売却価格</span><strong>${formatWan(p.salePrice,1)}</strong></div>
+      <div><span>売却費用</span><strong>${formatWan(p.saleCost,1)}</strong></div>
+      <div><span>売却時ローン残高</span><strong>${formatWan(p.remainingBalance,1)}</strong></div>
+      <div class="${p.netProceeds<0?'preview-danger':''}"><span>${netLabel}</span><strong>${netValue}</strong></div>
+    </div><div class="source-note">${p.saleAge}歳になる年の年初に売却し、売却価格－売却費用－ローン残高を新居購入時の現預金へ反映します。</div>`;
   }
 
   function mortgagePreviewMarkup() {
@@ -344,27 +401,52 @@
 
   function housingStep() {
     const h=state.housing;
-    return `<div class="page-head"><div class="eyebrow">Step 5</div><h2>現在の住まいと購入計画</h2><p>購入前の住居費、購入時の初期費用、ローン、購入後の維持費を分けて計算します。</p></div>
-      <section class="section"><h3>現在の住居費</h3><div class="form-grid three">
-        ${selectField('housing.currentType','現在の住まい',h.currentType||'rent',[["rent","賃貸"],["owner","持ち家"],["family","実家・社宅等"]])}
-        ${field('housing.monthlyCost','現在の月額住居費',h.monthlyCost,'万円/月',{min:0,max:300,step:.1,hint:'家賃または住宅ローン・管理費等の合計。'})}
-        ${field('housing.currentCostEndAge','現在の住居費の終了年齢',h.currentCostEndAge||99,'歳',{min:n(state.family.selfAge,35),max:110,hint:'賃貸を継続する場合は99歳など。購入する場合は購入年から自動停止します。'})}
-        ${field('housing.currentAnnualAfterEnd','終了後の年間維持費',h.currentAnnualAfterEnd||0,'万円/年',{min:0,max:1000,hint:'持ち家のローン完済後に残る固定資産税・管理費・修繕費等。賃貸は0で構いません。'})}
-      </div></section>
-      <section class="section"><h3>住宅購入</h3><div class="form-grid">
-        ${toggleField('housing.purchasePlan','住宅購入を予定している',h.purchasePlan)}
+    const currentAge=n(state.family.selfAge,35);
+    const owned=h.currentType==='ownerLoan'||h.currentType==='ownerNoLoan';
+    const currentHousingFields = h.currentType==='ownerLoan' ? `
+      <div class="form-grid three">
+        ${field('housing.currentMortgageBalance','現在のローン残高',h.currentMortgageBalance,'万円',{min:0,max:100000,hint:'住み替え予定がある場合、売却時の残高を自動計算します。'})}
+        ${field('housing.currentMortgageRate','現在の借入金利',h.currentMortgageRate,'%/年',{min:0,max:15,step:.01})}
+        ${field('housing.currentMortgageRemainingYears','残り返済期間',h.currentMortgageRemainingYears,'年',{min:1,max:50})}
+        ${field('housing.currentOwnerMonthlyCost','管理費・修繕積立金等',h.currentOwnerMonthlyCost,'万円/月',{min:0,max:300,step:.1,hint:'住宅ローン返済以外の毎月費用。'})}
+        ${field('housing.currentOwnerAnnualMaintenance','固定資産税・修繕費等',h.currentOwnerAnnualMaintenance,'万円/年',{min:0,max:1000,hint:'毎月費用とは別に発生する年間概算。物価上昇を反映します。'})}
+      </div><div class="mortgage-preview" id="current-mortgage-preview">${currentMortgagePreviewMarkup()}</div>`
+      : h.currentType==='ownerNoLoan' ? `
+      <div class="form-grid three">
+        ${field('housing.currentOwnerMonthlyCost','管理費・修繕積立金等',h.currentOwnerMonthlyCost,'万円/月',{min:0,max:300,step:.1})}
+        ${field('housing.currentOwnerAnnualMaintenance','固定資産税・修繕費等',h.currentOwnerAnnualMaintenance,'万円/年',{min:0,max:1000,hint:'物価上昇を反映します。'})}
+      </div>`
+      : `<div class="form-grid three">
+        ${field('housing.monthlyCost',h.currentType==='rent'?'現在の家賃':'現在の月額住居費',h.monthlyCost,'万円/月',{min:0,max:300,step:.1})}
+        ${field('housing.currentCostEndAge','現在の住居費の終了年齢',h.currentCostEndAge||99,'歳',{min:currentAge,max:110,hint:'賃貸を継続する場合は99歳など。住宅購入年からは自動停止します。'})}
+        ${field('housing.currentAnnualAfterEnd','終了後の年間住居費',h.currentAnnualAfterEnd||0,'万円/年',{min:0,max:1000,hint:'終了後に維持費等が残る場合のみ入力。'})}
+      </div>`;
+
+    const dispositionFields = owned && bool(h.purchasePlan) ? `<section class="subsection">
+      <h4>現在の住宅の扱い</h4><div class="form-grid three">
+        ${selectField('housing.currentHomeDisposition','住み替え時の扱い',h.currentHomeDisposition||'sell',[["sell","売却する"],["retain","保有を続ける"],["undecided","未定（売却を見込まない）"]],{hint:'保有・未定の場合は、現在の住宅ローンと維持費も新居購入後まで継続します。'})}
+        ${h.currentHomeDisposition==='sell'?field('housing.expectedSalePrice','想定売却価格',h.expectedSalePrice,'万円',{min:0,max:100000}):''}
+        ${h.currentHomeDisposition==='sell'?field('housing.saleCostRate','売却費用率',h.saleCostRate,'%',{min:0,max:15,step:.1,hint:'仲介手数料・登記等の概算。'}):''}
+      </div>${h.currentHomeDisposition==='sell'?`<div class="mortgage-preview" id="home-sale-preview">${homeSalePreviewMarkup()}</div>`:`<div class="info-box"><strong>保守的な計算：</strong>売却代金は見込まず、現在の住宅にかかるローン・管理費・維持費を新居購入後も計上します。</div>`}</section>`:'';
+
+    return `<div class="page-head"><div class="eyebrow">Step 5</div><h2>現在の住まいと購入計画</h2><p>現在の住宅ローンから、将来の住み替え・売却・新居購入までの資金移動をつなげます。</p></div>
+      <section class="section"><h3>現在の住まい</h3><div class="form-grid">
+        ${selectField('housing.currentType','現在の住まい',h.currentType||'rent',[["rent","賃貸"],["ownerLoan","持ち家・ローンあり"],["ownerNoLoan","持ち家・ローンなし"],["family","実家・社宅等"]])}
+      </div>${currentHousingFields}</section>
+      <section class="section"><h3>将来の住宅購入・住み替え</h3><div class="form-grid">
+        ${toggleField('housing.purchasePlan',owned?'住み替え・追加購入を予定している':'住宅購入を予定している',h.purchasePlan)}
       </div>
-      ${bool(h.purchasePlan) ? `<div class="form-grid three" style="margin-top:16px">
-        ${field('housing.buyAge','購入年齢',h.buyAge,'歳',{min:n(state.family.selfAge,35)+1,max:85})}
-        ${field('housing.price','物件価格',h.price,'万円',{min:0,max:100000})}
+      ${bool(h.purchasePlan) ? `${dispositionFields}<div class="form-grid three" style="margin-top:16px">
+        ${field('housing.buyAge',owned?'住み替え・購入年齢':'購入年齢',h.buyAge,'歳',{min:currentAge,max:85,hint:'現在年齢を指定した場合は、当年の年初に購入・住み替えする前提です。'})}
+        ${field('housing.price','新しい住宅の価格',h.price,'万円',{min:0,max:100000})}
         ${field('housing.downPayment','頭金',h.downPayment,'万円',{min:0,max:100000})}
         ${field('housing.miscRate','購入諸費用',h.miscRate,'%',{min:0,max:20,step:.1})}
         ${selectField('housing.miscInLoan','諸費用の扱い',bool(h.miscInLoan)?'yes':'no',[["no","現金で支払う"],["yes","ローンに含める"]])}
         ${field('housing.loanTerm','返済期間',h.loanTerm,'年',{min:1,max:50})}
         ${field('housing.interestRate','借入金利',h.interestRate,'%/年',{min:0,max:15,step:.01})}
-        ${field('housing.annualMaintenance','固定資産税・維持費',h.annualMaintenance,'万円/年',{min:0,max:1000,hint:'管理費・修繕積立金・固定資産税・修繕費等の概算。物価上昇を反映します。'})}
+        ${field('housing.annualMaintenance','新居の固定資産税・維持費',h.annualMaintenance,'万円/年',{min:0,max:1000,hint:'管理費・修繕積立金・固定資産税・修繕費等の概算。物価上昇を反映します。'})}
       </div><div class="mortgage-preview" id="mortgage-preview">${mortgagePreviewMarkup()}</div>` : ''}</section>
-      <div class="info-box"><strong>年次の扱い：</strong>「40歳で購入」は40歳になる年の年初に購入すると仮定します。その年は現在の家賃を計上せず、初期費用・ローン返済・維持費を計上します。住宅の資産価値は金融資産に含めません。</div>`;
+      <div class="info-box"><strong>年次の扱い：</strong>住み替え年は、年初に現在の住宅を売却してローンを完済し、その後に新居を購入する簡易前提です。通常時の住宅資産価値は金融資産に含めず、売却時の手取りだけを現預金へ反映します。</div>`;
   }
 
   function otherStep() {
@@ -384,11 +466,17 @@
     return `<div class="repeat-card"><div class="repeat-card-head"><div class="repeat-title">${esc(ev.label||`イベント${i+1}`)}</div><button class="icon-btn" data-action="remove-event" data-index="${i}">×</button></div>
       <div class="form-grid three">
         ${field(`events.${i}.label`,'名称',ev.label||'', '', {type:'text',placeholder:'例：車の買い替え'})}
-        ${field(`events.${i}.ageSelf`,'本人年齢',ev.ageSelf||n(state.family.selfAge,35)+5,'歳',{min:n(state.family.selfAge,35)+1,max:110})}
+        ${field(`events.${i}.ageSelf`,'本人年齢',ev.ageSelf||n(state.family.selfAge,35)+5,'歳',{min:n(state.family.selfAge,35),max:110,hint:'現在年齢を指定した場合は、当年の収支に反映します。'})}
         ${selectField(`events.${i}.kind`,'区分',ev.kind||'expense',[["expense","支出"],["income","収入"]])}
         ${field(`events.${i}.amount`,'金額',ev.amount||0,'万円',{min:0,max:100000})}
         ${selectField(`events.${i}.inflate`,'物価上昇',bool(ev.inflate)?'yes':'no',[["no","現在価値のまま"],["yes","物価上昇を反映"]])}
       </div></div>`;
+  }
+
+  function ownedLabel(h) {
+    const owned=h.currentType==='ownerLoan'||h.currentType==='ownerNoLoan';
+    if(!owned||!bool(h.purchasePlan)) return '—';
+    return h.currentHomeDisposition==='sell'?'売却':h.currentHomeDisposition==='retain'?'保有継続':'未定';
   }
 
   function reviewStep() {
@@ -401,7 +489,7 @@
         ${reviewCard('収入',[['本人年収',formatWan(state.income.self.gross)],['本人退職',`${state.income.self.retireAge}歳`],['収入変更点',`${incomeChanges}件`]])}
         ${reviewCard('生活費',[['毎月の基本生活費',`${formatWan(l.baseMonthly,1)}/月`],['年間換算',formatWan(n(l.baseMonthly)*12,1)],['その他支出',formatWan(l.otherAnnual)],['物価上昇率',`${state.meta.inflationRate}%`]])}
         ${reviewCard('資産',[['現預金',formatWan(a.cash)],['運用資産',formatWan(a.investment)],['積立期間',`${a.investmentStartAge}〜${a.investmentEndAge}歳`],['取崩し',`${a.withdrawalStartAge}歳から`],['DC等',formatWan(a.retirement)]])}
-        ${reviewCard('住まい',[['現在住居費',`${h.monthlyCost}万円/月`],['購入予定',bool(h.purchasePlan)?`${h.buyAge}歳・${formatWan(h.price)}`:'なし'],['維持費',bool(h.purchasePlan)?formatWan(h.annualMaintenance):'—']])}
+        ${reviewCard('住まい',[['現在の住まい',h.currentType==='ownerLoan'?'持ち家・ローンあり':h.currentType==='ownerNoLoan'?'持ち家・ローンなし':h.currentType==='rent'?'賃貸':'実家・社宅等'],['現在ローン',h.currentType==='ownerLoan'?formatWan(h.currentMortgageBalance):'—'],['購入・住み替え',bool(h.purchasePlan)?`${h.buyAge}歳・${formatWan(h.price)}`:'なし'],['現在宅の扱い',ownedLabel(h)]])}
         ${reviewCard('備え・予定',[['年間保険料',formatWan(i.annualPremium)],['払込終了',`${i.premiumEndAge}歳`],['イベント',`${(state.events||[]).length}件`]])}
       </div>
       <div class="warning-box" style="margin-top:18px"><strong>本ツールの範囲：</strong>将来の方向性を確認するための概算です。所得税・社会保険料・退職所得税、住宅ローン控除、児童手当、教育無償化、住宅資産価値などは個別計算していません。結果画面では、資産移転と家計支出を分け、毎年の検算差額を表示します。</div>`;
@@ -435,12 +523,12 @@
   function resultStatus(r) {
     const m=r.metrics;
     if(m.firstLiquidShortfallAge!=null){
-      const later=m.firstTotalShortfallAge!=null?` ／ ${m.firstTotalShortfallAge}歳で純資産マイナス`:'';
+      const later=m.firstTotalShortfallAge!=null?` ／ ${m.firstTotalShortfallAge}歳で金融資産全体が不足`:'';
       return [`${m.firstLiquidShortfallAge}歳`,`利用可能資産が枯渇${later}`];
     }
     if(m.firstEmergencyWithdrawalAge!=null) return [`${m.firstEmergencyWithdrawalAge}歳`,'現預金不足による臨時取り崩し'];
     if(m.firstPlannedWithdrawalAge!=null) return [`${m.firstPlannedWithdrawalAge}歳`,'設定どおり計画的に取り崩し'];
-    return ['なし',`${r.assumptions.horizonAge}歳まで取り崩しなし`];
+    return ['なし',`計算終了時まで取り崩しなし`];
   }
 
   function resultScreen() {
@@ -453,24 +541,25 @@
     </div></section>
     <main class="results-main"><div class="container">
       <div class="metric-grid">
-        ${metric('現在の家計収支',signedWan(r.current.annualBalance),`積立前 ／ 積立後の現金増減 ${signedWan(r.current.cashChange)}`)}
+        ${metric('現在年の通常家計収支',signedWan(r.current.annualBalance),`積立・資産取引等を反映した現金増減 ${signedWan(r.current.cashChange)}`)}
         ${metric('運用資産の出口',status,statusSub)}
-        ${metric(`${state.income.self.retireAge}歳時の純金融資産`,formatWan(m.retirementAssets),'住宅資産価値は含まない')}
-        ${metric(`${r.assumptions.horizonAge}歳時の純金融資産`,formatWan(m.finalAssets),m.finalCash<0?`未補填の資金不足 ${formatWan(m.finalCash)}`:'未補填の資金不足なし')}
+        ${metric(n(state.income.self.retireAge)<=r.assumptions.selfAge0?'現在の金融資産合計':`${state.income.self.retireAge}歳時の金融資産合計`,formatWan(m.retirementAssets),'住宅資産価値・住宅ローン残高は含まない')}
+        ${metric(r.assumptions.finalSpouseAge!=null?`計算終了時の金融資産合計`:`${r.assumptions.finalSelfAge}歳時の金融資産合計`,formatWan(m.finalAssets),`${r.assumptions.finalSpouseAge!=null?`本人${r.assumptions.finalSelfAge}歳・配偶者${r.assumptions.finalSpouseAge}歳 ／ `:''}${m.finalCash<0?`未補填の資金不足 ${formatWan(m.finalCash)}`:'未補填の資金不足なし'}`)}
       </div>
       <div class="result-layout"><div class="result-stack">
-        <section class="result-panel"><div class="panel-title-row"><div><h2>金融資産の構成と推移</h2><p>積み上げ棒は資産の内訳、線は純金融資産の合計です。</p></div></div><div class="chart-wrap"><canvas id="asset-chart"></canvas></div><div class="legend"><span><i class="legend-block cash"></i>現預金</span><span><i class="legend-block investment"></i>NISA等</span><span><i class="legend-block retirement"></i>DC・iDeCo等</span><span><i class="legend-block negative-cash"></i>資金不足</span><span><i class="legend-line total"></i>純金融資産</span></div><div class="source-note">現預金が不足した場合はNISA等から必要額を補填します。0円より下の赤い棒は、現預金と換金可能な運用資産を使い切っても補えない資金不足です。DC・iDeCo等は受取年齢まで使えないため、受取前は灰色の残高と赤い不足が同時に表示される場合があります。</div></section>
-        <section class="result-panel"><div class="panel-title-row"><div><h2>家計収支の推移</h2><p>収入－生活費・教育費・住宅費等。NISAやDCへの積立は資産移転のため含めません。</p></div></div><div class="chart-wrap" style="height:300px"><canvas id="balance-chart"></canvas></div><div class="legend"><span><i class="legend-block positive"></i>家計黒字</span><span><i class="legend-block negative-cash"></i>家計赤字</span></div></section>
+        <section class="result-panel"><div class="panel-title-row"><div><h2>金融資産の構成と推移</h2><p>積み上げ棒は資産の内訳、線は金融資産合計です。</p></div></div><div class="chart-wrap"><canvas id="asset-chart"></canvas></div><div class="legend"><span><i class="legend-block cash"></i>現預金</span><span><i class="legend-block investment"></i>NISA等</span><span><i class="legend-block retirement"></i>DC・iDeCo等</span><span><i class="legend-block negative-cash"></i>資金不足</span><span><i class="legend-line total"></i>金融資産合計</span></div><div class="source-note">現預金が不足した場合はNISA等から必要額を補填します。0円より下の赤い棒は、現預金と換金可能な運用資産を使い切っても補えない資金不足です。DC・iDeCo等は受取年齢まで使えないため、受取前は灰色の残高と赤い不足が同時に表示される場合があります。</div></section>
+        <section class="result-panel"><div class="panel-title-row"><div><h2>通常家計収支の推移</h2><p>給与・年金等の収入－生活費・教育費・通常住居費等。住宅売却・購入費とNISAやDCへの積立は資産取引・資産移転として含めません。</p></div></div><div class="chart-wrap" style="height:300px"><canvas id="balance-chart"></canvas></div><div class="legend"><span><i class="legend-block positive"></i>家計黒字</span><span><i class="legend-block negative-cash"></i>家計赤字</span></div></section>
         <section class="result-panel"><div class="table-tools"><div><h2 style="margin:0">年次キャッシュフロー</h2><p class="table-sub">期首から期末までの動きを追い、右端で毎年検算します。</p></div><div class="table-options"><label class="choice"><input type="checkbox" id="show-detail-rows"> 内訳を表示</label><label class="choice"><input type="checkbox" id="show-all-rows"> 全年表示</label></div></div>
-          <div class="reconcile-formula"><strong>検算式</strong><span>期末純金融資産 ＝ 期首純金融資産 ＋ 収入 − 支出 ＋ 運用収益</span><span class="ok-badge">最大差額 ${formatWan(m.maxReconciliationGap,3)}</span></div>
-          <div class="table-scroll" id="cf-table"></div><div class="source-note">金額単位：万円。現在年齢の行は資産スナップショットで、年間収支は翌年齢の行から反映します。</div></section>
+          <div class="reconcile-formula"><strong>検算式</strong><span>期末金融資産合計 ＝ 期首金融資産合計 ＋ 通常家計収支 ＋ 資産取引純額 ＋ 運用収益</span><span class="ok-badge">最大差額 ${formatWan(m.maxReconciliationGap,3)}</span></div>
+          <div class="table-scroll" id="cf-table"></div><div class="source-note">金額単位：万円。「現在・期首」は入力時点の残高で、同じ年齢の「年末」行に当年の収入・支出・積立・受取を反映します。</div></section>
       </div><aside class="result-stack">
         <section class="result-panel"><h2>確認ポイント</h2><div class="alert-list">${alertsHtml(r)}</div></section>
         <section class="result-panel"><h2>計算前提</h2><div class="assumption-list">
           <div>物価上昇率：<strong>${r.assumptions.inflationRatePct}%</strong></div>
           <div>運用利回り：<strong>${r.assumptions.investReturnPct}%</strong> ／ DC等：<strong>${r.assumptions.retirementReturnPct}%</strong></div>
-          <div>${esc(r.assumptions.timing)}</div><div>${esc(r.assumptions.withdrawal)}</div><div>${esc(r.assumptions.assetScope)}</div><div>${esc(r.assumptions.reconciliation)}</div><div>${esc(r.assumptions.taxScope)}</div>
+          <div>${esc(r.assumptions.timing)}</div><div>${esc(r.assumptions.pensionBirthYear)}</div><div>${esc(r.assumptions.withdrawal)}</div><div>${esc(r.assumptions.housingMove)}</div><div>${esc(r.assumptions.assetScope)}</div><div>${esc(r.assumptions.reconciliation)}</div><div>${esc(r.assumptions.taxScope)}</div>
           ${m.housingBurdenPct!=null?`<div>購入年の住居費負担：<strong>${formatPct(m.housingBurdenPct)}</strong></div>`:''}
+          ${m.homeSaleNet!=null?`<div>現在宅の売却手取り：<strong>${signedWan(m.homeSaleNet)}</strong></div>`:''}
           ${m.mortgageTotalInterest?`<div>住宅ローン利息総額：<strong>${formatWan(m.mortgageTotalInterest)}</strong></div>`:''}
         </div></section>
         <section class="result-panel"><h2>資料の基準</h2><div class="small muted">教育費は文部科学省「令和5年度 子供の学習費調査」訂正後資料、大学等はJASSO「令和4年度 学生生活調査」を参考にした概算です。年金の繰上げは原則月0.4%、繰下げは月0.7%で調整しています。</div></section>
@@ -491,7 +580,7 @@
     bindEvents();
     requestAnimationFrame(() => {
       if (screen === 'results') {
-        drawAssetChart(document.getElementById('asset-chart'), lastResult.rows);
+        drawAssetChart(document.getElementById('asset-chart'), lastResult.rows.filter(r=>!r.isSnapshot));
         drawBalanceChart(document.getElementById('balance-chart'), lastResult.rows.filter(r=>!r.isSnapshot));
         renderTable(false,false);
       } else if (screen === 'editor' && STEPS[currentStep][0] === 'income') {
@@ -517,6 +606,7 @@
     const refreshTable=()=>renderTable(allRows&&allRows.checked,detailRows&&detailRows.checked);
     if (allRows) allRows.addEventListener('change',refreshTable);
     if (detailRows) detailRows.addEventListener('change',refreshTable);
+    const jsonInput=document.getElementById('json-file-input');if(jsonInput)jsonInput.addEventListener('change',handleJsonImport);
     if(!resizeBound){window.addEventListener('resize',()=>requestAnimationFrame(redrawVisibleCharts));resizeBound=true;}
   }
 
@@ -538,7 +628,7 @@
       saveState();render();return;
     }
     saveState();
-    if (['family.hasSpouse','housing.purchasePlan','assets.withdrawalMethod'].includes(path) || path.includes('.timing')) { render(); return; }
+    if (['family.hasSpouse','housing.purchasePlan','housing.currentType','housing.currentHomeDisposition','assets.withdrawalMethod'].includes(path) || path.includes('.timing')) { render(); return; }
     if(path.startsWith('income.self')) updateIncomePreview('self');
     if(path.startsWith('income.spouse')) updateIncomePreview('spouse');
     if(path.startsWith('housing.')) updateMortgagePreview();
@@ -571,6 +661,7 @@
     else if (action === 'add-event') { state.events=state.events||[];state.events.push({label:'',ageSelf:n(state.family.selfAge)+5,kind:'expense',amount:0,inflate:false});saveState();render(); }
     else if (action === 'remove-event') { state.events.splice(Number(btn.dataset.index),1);saveState();render(); }
     else if (action === 'save-json') downloadJson();
+    else if (action === 'load-json') { const input=document.getElementById('json-file-input'); if(input){ input.value=''; input.click(); } }
   }
 
   function validateCurrent(){
@@ -591,18 +682,27 @@
       if(n(a.withdrawalStartAge)<=n(a.investmentEndAge)) errors.push('取り崩し開始年齢は積立終了年齢より後にしてください。');
       if(a.withdrawalMethod!=='lump'&&n(a.withdrawalYears)<1) errors.push('受取期間を入力してください。');
     }
-    if(currentStep===4&&bool(state.housing.purchasePlan)){
+    if(currentStep===4){
+      const h=state.housing;
+      if(h.currentType==='ownerLoan'){
+        if(n(h.currentMortgageBalance)<=0) errors.push('現在の住宅ローン残高を入力してください。');
+        if(n(h.currentMortgageRemainingYears)<1) errors.push('現在の住宅ローンの残り返済期間を入力してください。');
+      }
+      if(bool(h.purchasePlan)){
       if(n(state.housing.price)<=0)errors.push('住宅の物件価格を入力してください。');
-      if(n(state.housing.buyAge)<=n(state.family.selfAge))errors.push('購入年齢は現在年齢より後にしてください。');
+      if(n(state.housing.buyAge)<n(state.family.selfAge))errors.push('購入年齢は現在年齢以降にしてください。');
       if(n(state.housing.downPayment)>n(state.housing.price))errors.push('頭金が物件価格を超えています。');
       if(n(E.mortgagePreview(state.housing,state.housing.buyAge).principal)<=0)errors.push('住宅ローンの借入額が0円です。頭金・諸費用の設定を確認してください。');
+      const owned=h.currentType==='ownerLoan'||h.currentType==='ownerNoLoan';
+      if(owned&&h.currentHomeDisposition==='sell'&&n(h.expectedSalePrice)<=0)errors.push('現在の住宅の想定売却価格を入力してください。');
+      }
     }
     return showErrors(errors);
   }
 
   function validatePerson(key,label,baseAge,errors){
     const p=state.income[key];
-    if(n(p.retireAge)<=baseAge)errors.push(`${label}の就業終了年齢は現在年齢より後にしてください。`);
+    if(n(p.gross)>0&&n(p.retireAge)<=baseAge)errors.push(`${label}は現在の額面年収が入力されているため、就業終了年齢を現在年齢より後にしてください。退職済みの場合は現在年収を0円にします。`);
     if(n(p.growthUntilAge)<baseAge)errors.push(`${label}の年収上昇終了年齢を確認してください。`);
     const ages=(p.changes||[]).map(c=>n(c.age));
     if(new Set(ages).size!==ages.length)errors.push(`${label}の年収変更年齢が重複しています。`);
@@ -631,7 +731,7 @@
     d.income.spouse.gross=450;d.income.spouse.net=350;d.income.spouse.growthRate=1;d.income.spouse.growthUntilAge=48;d.income.spouse.changes=[{age:45,gross:520}];d.income.spouse.retireAge=65;d.income.spouse.pensionMonthly65=11;d.income.spouse.severance=700;
     d.living.baseMonthly=30;d.living.otherAnnual=50;d.meta.inflationRate=1.5;
     d.assets.cash=800;d.assets.investment=450;d.assets.retirement=250;d.assets.monthlyInvestment=10;d.assets.investmentStartAge=38;d.assets.investmentEndAge=60;d.assets.withdrawalStartAge=65;d.assets.withdrawalMethod='annuity';d.assets.withdrawalYears=20;d.assets.monthlyRetirement=3;d.assets.investReturn=3;d.assets.retirementReturn=3;
-    d.housing.monthlyCost=13;d.housing.purchasePlan=true;d.housing.buyAge=42;d.housing.price=5200;d.housing.downPayment=700;d.housing.miscRate=7;d.housing.loanTerm=35;d.housing.interestRate=1.2;d.housing.annualMaintenance=38;
+    d.housing.currentType='ownerLoan';d.housing.currentMortgageBalance=2800;d.housing.currentMortgageRate=0.8;d.housing.currentMortgageRemainingYears=27;d.housing.currentOwnerMonthlyCost=2.5;d.housing.currentOwnerAnnualMaintenance=18;d.housing.purchasePlan=true;d.housing.currentHomeDisposition='sell';d.housing.expectedSalePrice=4200;d.housing.saleCostRate=4;d.housing.buyAge=45;d.housing.price=6200;d.housing.downPayment=900;d.housing.miscRate=7;d.housing.loanTerm=35;d.housing.interestRate=1.2;d.housing.annualMaintenance=42;
     d.insurance.annualPremium=36;d.insurance.premiumEndAge=60;d.events=[{label:'車の買い替え',ageSelf:48,kind:'expense',amount:350,inflate:true},{label:'住宅リフォーム',ageSelf:68,kind:'expense',amount:600,inflate:true}];
     return d;
   }
@@ -640,27 +740,40 @@
     const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='compass-plan-light-data.json';a.click();URL.revokeObjectURL(a.href);
   }
 
+
+  async function handleJsonImport(e){
+    const file=e.target.files&&e.target.files[0];if(!file)return;
+    try{
+      const text=await file.text();const parsed=JSON.parse(text);
+      if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw new Error('JSON形式が正しくありません。');
+      state=deepMerge(E.defaultData(),migrateState(parsed));saveState();currentStep=0;screen='editor';lastResult=null;render();
+      alert('入力データを読み込みました。');
+    }catch(err){alert(`データを読み込めませんでした。${err&&err.message?' '+err.message:''}`);}
+  }
+
   function eventLabelsByAge(){
     const map=new Map();
-    (lastResult.events||[]).forEach(ev=>{const arr=map.get(ev.age)||[];arr.push(ev.label);map.set(ev.age,arr);});
+    (lastResult.events||[]).forEach(ev=>{const key=`${ev.year}:${ev.age}`;const arr=map.get(key)||[];arr.push(ev.label);map.set(key,arr);});
     return map;
   }
 
   function renderTable(showAll,showDetail){
     const holder=document.getElementById('cf-table');if(!holder)return;
     const labels=eventLabelsByAge();
-    const rows=lastResult.rows.filter((r,i)=>showAll||r.isSnapshot||i===lastResult.rows.length-1||r.selfAge%5===0||labels.has(r.selfAge)||r.cash<0||n(r.investmentWithdrawal)>0||Math.abs(r.reconciliationGap)>0.01);
-    const detailHead=showDetail?'<th>給与</th><th>年金</th><th>退職金</th><th>他収入</th><th>生活費</th><th>教育費</th><th>住居費</th><th>保険</th><th>他支出</th><th>住宅初期費用</th><th>計画取崩</th><th>臨時取崩</th><th>DC受取</th><th>ローン残高</th>':'';
-    holder.innerHTML=`<table class="cf-table ${showDetail?'detail':''}"><thead><tr><th>年齢</th><th>主なイベント</th><th>期首総資産</th><th>収入</th><th>支出</th><th>家計収支</th><th>積立移転</th><th>運用取崩</th><th>運用収益</th><th>現金増減</th><th>期末現預金</th><th>NISA等</th><th>DC等</th><th>期末総資産</th><th>検算</th>${detailHead}</tr></thead><tbody>${rows.map(r=>tableRow(r,labels,showDetail)).join('')}</tbody></table>`;
+    const rows=lastResult.rows.filter((r,i)=>{const key=`${r.year}:${r.selfAge}`;return showAll||r.isSnapshot||r.index===0||i===lastResult.rows.length-1||r.selfAge%5===0||labels.has(key)||r.cash<0||n(r.investmentWithdrawal)>0||Math.abs(r.reconciliationGap)>0.01;});
+    const detailHead=showDetail?'<th>給与</th><th>年金</th><th>退職金</th><th>他収入</th><th>生活費</th><th>教育費</th><th>通常住居費</th><th>保険</th><th>他支出</th><th>住宅購入支出</th><th>住宅売却純額</th><th>計画取崩</th><th>臨時取崩</th><th>DC受取</th><th>既存ローン</th><th>新規ローン</th><th>ローン合計</th>':'';
+    holder.innerHTML=`<table class="cf-table ${showDetail?'detail':''}"><thead><tr><th>年齢</th><th>主なイベント</th><th>期首金融資産</th><th>通常収入</th><th>通常支出</th><th>通常家計収支</th><th>資産取引</th><th>積立移転</th><th>運用取崩</th><th>運用収益</th><th>現金増減</th><th>期末現預金</th><th>NISA等</th><th>DC等</th><th>金融資産合計</th><th>検算</th>${detailHead}</tr></thead><tbody>${rows.map(r=>tableRow(r,labels,showDetail)).join('')}</tbody></table>`;
   }
 
   function tableRow(r,labels,showDetail){
-    const event=(labels.get(r.selfAge)||[]).join('／');
+    const key=`${r.year}:${r.selfAge}`;
+    const event=r.isSnapshot?'':(labels.get(key)||[]).join('／');
     const classes=[r.annualBalance<0?'negative':'',r.cash<0?'cash-negative':'',r.totalFinancialAssets<0?'total-negative':'',event?'event-row':''].filter(Boolean).join(' ');
     const transfer=n(r.investmentContribution)+n(r.retirementContribution);
     const verify=Math.abs(n(r.reconciliationGap))<0.01?'<span class="verify-ok">OK</span>':`<span class="verify-ng">${numCell(r.reconciliationGap,3)}</span>`;
-    const summary=`<td>${r.selfAge}歳${r.isSnapshot?'（現在）':''}</td><td class="event-cell">${event?esc(event):'—'}</td><td>${numCell(r.openingTotalFinancialAssets)}</td><td>${r.isSnapshot?'—':numCell(r.income)}</td><td>${r.isSnapshot?'—':numCell(r.expense)}</td><td>${r.isSnapshot?'—':signedCell(r.annualBalance)}</td><td>${r.isSnapshot?'—':numCell(transfer)}</td><td>${r.isSnapshot?'—':numCell(r.investmentWithdrawal)}</td><td>${r.isSnapshot?'—':signedCell(r.totalReturn)}</td><td>${r.isSnapshot?'—':signedCell(r.cashChange)}</td><td class="${r.cash<0?'strong-negative':''}">${numCell(r.cash)}</td><td>${numCell(r.investment)}</td><td>${numCell(r.retirement)}</td><td class="${r.totalFinancialAssets<0?'strong-negative':''}">${numCell(r.totalFinancialAssets)}</td><td>${verify}</td>`;
-    const detail=showDetail?`<td>${r.isSnapshot?'—':numCell(r.employmentIncome)}</td><td>${r.isSnapshot?'—':numCell(r.pensionIncome)}</td><td>${r.isSnapshot?'—':numCell(r.severanceIncome)}</td><td>${r.isSnapshot?'—':numCell(r.otherIncome)}</td><td>${r.isSnapshot?'—':numCell(r.livingExpense)}</td><td>${r.isSnapshot?'—':numCell(r.educationExpense)}</td><td>${r.isSnapshot?'—':numCell(r.housingExpense)}</td><td>${r.isSnapshot?'—':numCell(r.insuranceExpense)}</td><td>${r.isSnapshot?'—':numCell(r.otherExpense)}</td><td>${r.isSnapshot?'—':numCell(r.homeUpfront)}</td><td>${r.isSnapshot?'—':numCell(r.plannedInvestmentWithdrawal)}</td><td>${r.isSnapshot?'—':numCell(r.emergencyInvestmentWithdrawal)}</td><td>${r.isSnapshot?'—':numCell(r.retirementRelease)}</td><td>${numCell(r.mortgageBalance)}</td>`:'';
+    const ageLabel=r.isSnapshot?`${r.selfAge}歳（現在・期首）`:`${r.selfAge}歳（年末）`;
+    const summary=`<td>${ageLabel}</td><td class="event-cell">${event?esc(event):'—'}</td><td>${numCell(r.openingTotalFinancialAssets)}</td><td>${r.isSnapshot?'—':numCell(r.income)}</td><td>${r.isSnapshot?'—':numCell(r.expense)}</td><td>${r.isSnapshot?'—':signedCell(r.annualBalance)}</td><td>${r.isSnapshot?'—':signedCell(r.netAssetTransaction)}</td><td>${r.isSnapshot?'—':numCell(transfer)}</td><td>${r.isSnapshot?'—':numCell(r.investmentWithdrawal)}</td><td>${r.isSnapshot?'—':signedCell(r.totalReturn)}</td><td>${r.isSnapshot?'—':signedCell(r.cashChange)}</td><td class="${r.cash<0?'strong-negative':''}">${numCell(r.cash)}</td><td>${numCell(r.investment)}</td><td>${numCell(r.retirement)}</td><td class="${r.totalFinancialAssets<0?'strong-negative':''}">${numCell(r.totalFinancialAssets)}</td><td>${verify}</td>`;
+    const detail=showDetail?`<td>${r.isSnapshot?'—':numCell(r.employmentIncome)}</td><td>${r.isSnapshot?'—':numCell(r.pensionIncome)}</td><td>${r.isSnapshot?'—':numCell(r.severanceIncome)}</td><td>${r.isSnapshot?'—':numCell(r.otherIncome)}</td><td>${r.isSnapshot?'—':numCell(r.livingExpense)}</td><td>${r.isSnapshot?'—':numCell(r.educationExpense)}</td><td>${r.isSnapshot?'—':numCell(r.housingExpense)}</td><td>${r.isSnapshot?'—':numCell(r.insuranceExpense)}</td><td>${r.isSnapshot?'—':numCell(r.otherExpense)}</td><td>${r.isSnapshot?'—':numCell(r.homeUpfront)}</td><td>${r.isSnapshot?'—':signedCell(r.homeSaleNet)}</td><td>${r.isSnapshot?'—':numCell(r.plannedInvestmentWithdrawal)}</td><td>${r.isSnapshot?'—':numCell(r.emergencyInvestmentWithdrawal)}</td><td>${r.isSnapshot?'—':numCell(r.retirementRelease)}</td><td>${numCell(r.currentMortgageBalance)}</td><td>${numCell(r.newMortgageBalance)}</td><td>${numCell(r.mortgageBalance)}</td>`:'';
     return `<tr class="${classes}">${summary}${detail}</tr>`;
   }
 
@@ -673,6 +786,8 @@
 
   function updateMortgagePreview(){
     const holder=document.getElementById('mortgage-preview');if(holder)holder.innerHTML=mortgagePreviewMarkup();
+    const current=document.getElementById('current-mortgage-preview');if(current)current.innerHTML=currentMortgagePreviewMarkup();
+    const sale=document.getElementById('home-sale-preview');if(sale)sale.innerHTML=homeSalePreviewMarkup();
   }
 
   function updateInvestmentPreview(){
@@ -686,7 +801,7 @@
   }
 
   function redrawVisibleCharts(){
-    if(screen==='results'&&lastResult){drawAssetChart(document.getElementById('asset-chart'),lastResult.rows);drawBalanceChart(document.getElementById('balance-chart'),lastResult.rows.filter(r=>!r.isSnapshot));}
+    if(screen==='results'&&lastResult){drawAssetChart(document.getElementById('asset-chart'),lastResult.rows.filter(r=>!r.isSnapshot));drawBalanceChart(document.getElementById('balance-chart'),lastResult.rows.filter(r=>!r.isSnapshot));}
     if(screen==='editor'&&STEPS[currentStep][0]==='income'){updateIncomePreview('self');if(bool(state.family.hasSpouse))updateIncomePreview('spouse');}
   }
 
