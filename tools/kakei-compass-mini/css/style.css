@@ -256,3 +256,9 @@ tr.event-row td:first-child{color:var(--navy-700);font-weight:800}
   .reconcile-formula .ok-badge{margin-left:0}
 }
 .result-layout>.result-stack,.result-layout>aside,.result-panel,.table-scroll{min-width:0;max-width:100%}
+
+/* v1.3: current home loan and move/sale planning */
+.subsection{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
+.subsection h4{margin:0 0 14px;color:var(--navy-900);font-size:.95rem}
+.mortgage-preview-grid>div.preview-danger{border-color:#efc6ca;background:#fff7f7}
+.mortgage-preview-grid>div.preview-danger strong{color:#a52f38}
