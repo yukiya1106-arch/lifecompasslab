@@ -6,16 +6,16 @@
 <title>資産運用｜ライフプラン電卓</title>
 <style>
 :root{--bg:#f2f6fb;--line:#d7e2ef;--text:#0a2247;--muted:#627086;--blue:#1f67bf}
-*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI","Noto Sans JP",sans-serif}
-.frame{display:block;width:100%;height:900px;border:0;background:var(--bg)}
-.wrap{max-width:1180px;margin:0 auto 40px;padding:0 14px}.disclaimer{padding:22px;border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:0 10px 30px rgba(10,34,71,.06)}
+*{box-sizing:border-box}html,body{margin:0;background:transparent;color:var(--text);font-family:system-ui,-apple-system,"Segoe UI","Noto Sans JP",sans-serif}
+.frame{display:block;width:100%;height:900px;border:0;background:transparent}
+.wrap{max-width:1080px;margin:20px auto 36px;padding:0}.disclaimer{padding:22px;border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:0 10px 30px rgba(10,34,71,.06)}
 .title{display:flex;align-items:center;gap:10px;margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid #e7edf5;font-size:20px;font-weight:900}.mark{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#eaf3fc;color:var(--blue);font-size:14px;font-weight:900}
 .block+.block{margin-top:17px;padding-top:17px;border-top:1px solid #edf1f6}.block h3{margin:0 0 7px;font-size:15px;color:#263d5e}.block p{margin:0;color:var(--muted);font-size:13px;line-height:1.85}.footer{padding:28px 14px 10px;text-align:center;color:#8a97aa;font-size:12px;font-weight:600}
 @media(max-width:480px){.wrap{padding:0 10px}.disclaimer{padding:16px;border-radius:14px}.title{font-size:17px}.block h3{font-size:14px}.block p{font-size:12px;line-height:1.8}}
 </style>
 </head>
 <body>
-<iframe class="frame" id="assetFrame" src="./asset-v9.html?v=12" title="資産運用シミュレーター"></iframe>
+<iframe class="frame" id="assetFrame" src="./asset-v9.html?v=13" title="資産運用シミュレーター"></iframe>
 <main class="wrap">
 <section class="disclaimer" aria-labelledby="disclaimer-title">
 <h2 class="title" id="disclaimer-title"><span class="mark">i</span>免責事項・ご注意事項</h2>
@@ -27,10 +27,10 @@
 </main>
 <script>
 const frame=document.getElementById('assetFrame');
-function resize(){try{const h=frame.contentDocument.documentElement.scrollHeight;frame.style.height=Math.max(760,h+8)+'px'}catch(e){}}
-frame.addEventListener('load',()=>{resize();try{new MutationObserver(resize).observe(frame.contentDocument.documentElement,{childList:true,subtree:true,attributes:true})}catch(e){}});
+function prepareInner(){try{const doc=frame.contentDocument;if(!doc)return;const style=doc.createElement('style');style.textContent='.hero{display:none!important}.wrap{margin:0 auto 40px!important;padding:0 14px!important;max-width:1080px!important}.panel{border-radius:18px!important}html,body{background:transparent!important}';doc.head.appendChild(style)}catch(e){}}
+function resize(){try{const h=frame.contentDocument.documentElement.scrollHeight;frame.style.height=Math.max(760,h+8)+'px';parent.postMessage({type:'lc-asset-height',height:document.documentElement.scrollHeight},'*')}catch(e){}}
+frame.addEventListener('load',()=>{prepareInner();resize();try{new MutationObserver(()=>{resize();parent.postMessage({type:'lc-asset-height',height:document.documentElement.scrollHeight},'*')}).observe(frame.contentDocument.documentElement,{childList:true,subtree:true,attributes:true})}catch(e){}});
 window.addEventListener('resize',resize);
-window.addEventListener('message',event=>{if(typeof event.data==='string'&&(event.data==='lc-close-asset-v9'||event.data.startsWith('lc-nav-')))parent.postMessage(event.data,'*')});
 </script>
 </body>
 </html>
