@@ -15,7 +15,7 @@
 </style>
 </head>
 <body>
-<iframe class="frame" id="assetFrame" src="./asset-v9.html?v=10" title="資産運用シミュレーター"></iframe>
+<iframe class="frame" id="assetFrame" src="./asset-v9.html?v=12" title="資産運用シミュレーター"></iframe>
 <main class="wrap">
 <section class="disclaimer" aria-labelledby="disclaimer-title">
 <h2 class="title" id="disclaimer-title"><span class="mark">i</span>免責事項・ご注意事項</h2>
@@ -30,7 +30,7 @@ const frame=document.getElementById('assetFrame');
 function resize(){try{const h=frame.contentDocument.documentElement.scrollHeight;frame.style.height=Math.max(760,h+8)+'px'}catch(e){}}
 frame.addEventListener('load',()=>{resize();try{new MutationObserver(resize).observe(frame.contentDocument.documentElement,{childList:true,subtree:true,attributes:true})}catch(e){}});
 window.addEventListener('resize',resize);
-window.addEventListener('message',event=>{if(event.data==='lc-close-asset-v9')parent.postMessage('lc-close-asset-v9','*')});
+window.addEventListener('message',event=>{if(typeof event.data==='string'&&(event.data==='lc-close-asset-v9'||event.data.startsWith('lc-nav-')))parent.postMessage(event.data,'*')});
 </script>
 </body>
 </html>
