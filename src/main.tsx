@@ -92,8 +92,8 @@ function Header() {
 
 function HomePage() {
   const featuredTools = [
-    tools.find((tool) => tool.url === "/lifecompasslab/tools/kakei-compass-mini/"),
-    ...tools.filter((tool) => tool.featured && tool.url !== "/lifecompasslab/tools/kakei-compass-mini/"),
+    tools.find((tool) => tool.url === "/lifecompasslab/tools/lifeplan-calculator/"),
+    ...tools.filter((tool) => tool.featured && tool.url !== "/lifecompasslab/tools/lifeplan-calculator/"),
   ]
     .filter((tool): tool is Tool => Boolean(tool))
     .slice(0, 3);

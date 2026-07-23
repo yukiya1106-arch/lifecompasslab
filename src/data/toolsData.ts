@@ -86,7 +86,7 @@ export const tools: Tool[] = [
     url: "/lifecompasslab/tools/lifeplan-calculator/",
     buttonLabel: "試してみる",
     icon: "chart",
-    featured: false,
+    featured: true,
   },
   {
     title: "住宅ローン控除COMPASS",
@@ -98,6 +98,6 @@ export const tools: Tool[] = [
     url: "#/tools/mortgage-deduction-compass",
     buttonLabel: "試してみる",
     icon: "home",
-    featured: true,
+    featured: false,
   },
 ];
