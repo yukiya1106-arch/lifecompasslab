@@ -26,6 +26,28 @@
 
   gtag('config', 'G-M5JPXM6478');
 </script>
+<script>
+  (() => {
+    const before = 'ライフプラン電卓';
+    const after = 'COMPASS Tools';
+    const replaceName = () => {
+      if (!document.body) return;
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (node.nodeValue && node.nodeValue.includes(before)) {
+          node.nodeValue = node.nodeValue.replaceAll(before, after);
+        }
+      }
+    };
+    new MutationObserver(replaceName).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    window.addEventListener('DOMContentLoaded', replaceName);
+  })();
+</script>
   </head>
   <body>
     <div id="root"></div>
