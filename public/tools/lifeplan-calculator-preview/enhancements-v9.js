@@ -6,7 +6,9 @@ let assetHost=null,assetFrame=null,originalAssetRegion=null;
 const norm=v=>(v||'').replace(/[\s\u00a0]+/g,'').trim();
 const own=e=>norm([...e.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join(''));
 function renameProduct(){
-  document.title=(document.title||'').replace(/ライフプラン電卓/g,'COMPASS Tools');
+  const currentTitle=document.title||'';
+  const nextTitle=currentTitle.replace(/ライフプラン電卓/g,'COMPASS Tools');
+  if(nextTitle!==currentTitle)document.title=nextTitle;
   if(!document.body)return;
   const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
   let node;
@@ -42,5 +44,5 @@ function isAssetControl(node){if(!node)return false;const t=norm(node.textConten
 document.addEventListener('click',event=>{const node=event.target.closest('button,a,[role="button"]');if(isAssetControl(node)){setTimeout(mountAsset,0)}else if(node&&['生活費逆算','住宅ローン','住宅ローン控除'].some(x=>norm(node.textContent).endsWith(norm(x)))){unmountAsset()}},true);
 window.addEventListener('message',event=>{if(event.data&&event.data.type==='lc-asset-height')resizeAsset(event.data.height)});
 function refresh(){renameProduct();improveDetails();const onAsset=norm(document.body.innerText).includes(norm('資産形成を試算する'));if(onAsset)mountAsset();else unmountAsset()}
-addCss();new MutationObserver(refresh).observe(document.documentElement,{childList:true,subtree:true,characterData:true});refresh();
+addCss();new MutationObserver(refresh).observe(document.documentElement,{childList:true,subtree:true});refresh();
 })();
