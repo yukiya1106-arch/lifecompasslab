@@ -92,8 +92,8 @@ function Header() {
 
 function HomePage() {
   const featuredTools = [
-    tools.find((tool) => tool.url === "#/tools/mortgage-deduction-compass"),
-    ...tools.filter((tool) => tool.featured && tool.url !== "#/tools/mortgage-deduction-compass"),
+    tools.find((tool) => tool.url === "/lifecompasslab/tools/kakei-compass-mini/"),
+    ...tools.filter((tool) => tool.featured && tool.url !== "/lifecompasslab/tools/kakei-compass-mini/"),
   ]
     .filter((tool): tool is Tool => Boolean(tool))
     .slice(0, 3);
