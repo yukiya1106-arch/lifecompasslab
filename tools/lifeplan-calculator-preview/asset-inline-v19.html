@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>資産形成プレビューを準備しています</title>
+<style>html,body{margin:0;min-height:100%;background:transparent;font-family:system-ui,-apple-system,"Segoe UI","Noto Sans JP",sans-serif;color:#0a2247}body{display:grid;place-items:center}.status{margin:24px;padding:20px;border:1px solid #d8e3ef;border-radius:14px;background:#fff;font-weight:700;line-height:1.8}.status small{display:block;margin-top:8px;color:#66758a;font-weight:400}</style>
+</head>
+<body>
+<div class="status" id="status">資産形成画面を読み込んでいます…</div>
+<script>
+(async()=>{
+  const response=await fetch('./asset-inline-v16.html?v=19',{cache:'no-store'});
+  if(!response.ok)throw new Error('元の資産形成画面を読み込めませんでした。');
+  let html=await response.text();
+  const replaceOne=(before,after,label)=>{
+    if(!html.includes(before))throw new Error('更新対象が見つかりません: '+label);
+    html=html.replace(before,after);
+  };
+
+  html=html.replaceAll('積立元本','投資元本');
+  html=html.replaceAll('積立期間','運用期間');
+  html=html.replaceAll('毎月の積立額を合計した金額','初期投資額と毎月の積立額の合計');
+  html=html.replaceAll('積立元本と運用成果の合計','投資元本と運用成果の合計');
+
+  replaceOne(
+    "{icon:'↗',title:'将来の資産額',desc:'今の積立を続けると、いくらになるか',context:'入力した条件で積み立てた場合',guide:'将来額は、運用期間と利回りの影響を大きく受けます。まず無理なく継続できる積立額を基準に確認しましょう。'},",
+    "{icon:'↗',title:'将来の資産額',desc:'今の運用を続けると、いくらになるか',context:'入力した条件で運用を続けた場合',guide:'将来額は、初期投資額・毎月の積立額・運用期間・利回りの影響を受けます。まとまった資金だけを運用する場合は、毎月積立額を0万円にしてください。'},",
+    '将来資産モードの説明'
+  );
+
+  replaceOne(
+    "const defs={\ntarget:",
+    "const defs={\ninitial:{label:'初期投資額',unit:'万円',min:0,max:10000,step:10,presets:[0,500,1000,3000]},\ntarget:",
+    '初期投資額の入力定義'
+  );
+
+  replaceOne(
+    "const defaults={target:1000,monthly:3,years:20,rate:2};",
+    "const defaults={initial:0,target:1000,monthly:3,years:20,rate:2};",
+    '初期値'
+  );
+
+  replaceOne(
+    "function activeKeys(){return mode===0?['monthly','years','rate']:mode===1?['target','monthly','rate']:mode===2?['target','years','rate']:['target','monthly','years']}",
+    "function activeKeys(){return mode===0?['initial','monthly','years','rate']:mode===1?['target','monthly','rate']:mode===2?['target','years','rate']:['target','monthly','years']}",
+    '将来資産モードの入力項目'
+  );
+
+  replaceOne(
+    "const titles=['現在の積立条件','目標と現在の積立条件','目標と運用期間','目標・積立額・期間'];const copies=['毎月の積立額、期間、想定利回りを入力してください。','目標額、毎月の積立額、想定利回りを入力してください。','目標額、運用期間、想定利回りを入力してください。','目標額、毎月の積立額、運用期間を入力してください。'];",
+    "const titles=['現在の運用条件','目標と現在の積立条件','目標と運用期間','目標・積立額・期間'];const copies=['初期投資額と毎月の積立額、期間、想定利回りを入力してください。','目標額、毎月の積立額、想定利回りを入力してください。','目標額、運用期間、想定利回りを入力してください。','目標額、毎月の積立額、運用期間を入力してください。'];",
+    '入力欄の見出しと説明'
+  );
+
+  replaceOne(
+    "function result(){let months=Math.round(state.years*12),monthly=state.monthly*10000,rate=state.rate,total=0,warning='';if(mode===0){total=fv(monthly,rate,months)}else if(mode===1){months=requiredMonths(state.target*10000,monthly,rate);total=fv(monthly,rate,months);if(months>=1200)warning='100年以内に目標額へ届かない条件です。積立額や目標額を見直してください。'}else if(mode===2){monthly=requiredMonthly(state.target*10000,rate,months);total=fv(monthly,rate,months)}else{rate=requiredRate(state.target*10000,monthly,months);total=fv(monthly,rate,months);if(rate>=50)warning='必要利回りが50%以上となる条件です。積立額・期間・目標額の見直しをおすすめします。'}const principal=monthly*months,gain=Math.max(0,total-principal);return{months,monthly,rate,total,principal,gain,warning}}",
+    "function result(){let months=Math.round(state.years*12),monthly=state.monthly*10000,rate=state.rate,total=0,warning='',initial=mode===0?state.initial*10000:0;if(mode===0){total=initial*Math.pow(1+mr(rate),months)+fv(monthly,rate,months)}else if(mode===1){months=requiredMonths(state.target*10000,monthly,rate);total=fv(monthly,rate,months);if(months>=1200)warning='100年以内に目標額へ届かない条件です。積立額や目標額を見直してください。'}else if(mode===2){monthly=requiredMonthly(state.target*10000,rate,months);total=fv(monthly,rate,months)}else{rate=requiredRate(state.target*10000,monthly,months);total=fv(monthly,rate,months);if(rate>=50)warning='必要利回りが50%以上となる条件です。積立額・期間・目標額の見直しをおすすめします。'}const principal=initial+monthly*months,gain=Math.max(0,total-principal);return{months,monthly,rate,total,principal,gain,warning,initial}}",
+    '将来資産の計算式'
+  );
+
+  replaceOne(
+    "function conditionRows(r){const rows=[];if(mode!==1&&mode!==2&&mode!==3){}if(mode!==1)rows.push(['運用期間',period(r.months)]);if(mode!==2)rows.push(['毎月積立額',man(r.monthly)]);if(mode!==3)rows.push(['想定利回り',r.rate.toFixed(1)+'%']);if(mode!==0)rows.unshift(['目標額',state.target.toLocaleString('ja-JP')+'万円']);return rows.slice(0,4)}",
+    "function conditionRows(r){if(mode===0)return[['初期投資額',man(r.initial)],['運用期間',period(r.months)],['毎月積立額',man(r.monthly)],['想定利回り',r.rate.toFixed(1)+'%']];const rows=[];if(mode!==1)rows.push(['運用期間',period(r.months)]);if(mode!==2)rows.push(['毎月積立額',man(r.monthly)]);if(mode!==3)rows.push(['想定利回り',r.rate.toFixed(1)+'%']);rows.unshift(['目標額',state.target.toLocaleString('ja-JP')+'万円']);return rows.slice(0,4)}",
+    '結果欄の条件表示'
+  );
+
+  replaceOne(
+    "function points(r){const years=Math.max(1,Math.ceil(r.months/12));const interval=years<=30?1:years<=60?2:5;const arr=[];for(let y=interval;y*12<=r.months;y+=interval)arr.push(y*12);if(!arr.length||arr[arr.length-1]!==r.months)arr.push(r.months);return arr.map(m=>{const principal=r.monthly*m,total=fv(r.monthly,r.rate,m);return{m,principal,gain:Math.max(0,total-principal),total}})}",
+    "function points(r){const years=Math.max(1,Math.ceil(r.months/12));const interval=years<=30?1:years<=60?2:5;const arr=[];for(let y=interval;y*12<=r.months;y+=interval)arr.push(y*12);if(!arr.length||arr[arr.length-1]!==r.months)arr.push(r.months);return arr.map(m=>{const initial=r.initial||0,principal=initial+r.monthly*m,total=initial*Math.pow(1+mr(r.rate),m)+fv(r.monthly,r.rate,m);return{m,principal,gain:Math.max(0,total-principal),total}})}",
+    '資産推移グラフの計算式'
+  );
+
+  document.open();
+  document.write(html);
+  document.close();
+})().catch(error=>{
+  console.error(error);
+  const status=document.getElementById('status');
+  if(status)status.innerHTML='<strong>資産形成画面の更新に失敗しました。</strong><small>'+String(error.message||error)+'</small>';
+});
+</script>
+</body>
+</html>
