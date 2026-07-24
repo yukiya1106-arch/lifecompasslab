@@ -10,7 +10,7 @@
 <div class="status" id="status">資産形成画面を読み込んでいます…</div>
 <script>
 (async()=>{
-  const response=await fetch('./asset-inline-v16.html?v=19',{cache:'no-store'});
+  const response=await fetch('./asset-inline-v16.html?v=20',{cache:'no-store'});
   if(!response.ok)throw new Error('元の資産形成画面を読み込めませんでした。');
   let html=await response.text();
   const replaceOne=(before,after,label)=>{
@@ -22,6 +22,19 @@
   html=html.replaceAll('積立期間','運用期間');
   html=html.replaceAll('毎月の積立額を合計した金額','初期投資額と毎月の積立額の合計');
   html=html.replaceAll('積立元本と運用成果の合計','投資元本と運用成果の合計');
+
+  replaceOne(
+    '</style>',
+    `.fields.compact-investment{grid-template-columns:repeat(2,minmax(0,1fr))}
+.fields.compact-investment .field{padding:13px}
+.fields.compact-investment .field-top{gap:8px}
+.fields.compact-investment .value-box{width:128px}
+.fields.compact-investment .field-control{grid-template-columns:1fr;gap:8px;margin-top:10px}
+.fields.compact-investment .presets{justify-content:flex-start}
+@media(max-width:700px){.fields.compact-investment{grid-template-columns:1fr}.fields.compact-investment .value-box{width:136px}}
+</style>`,
+    '運用条件のコンパクト表示'
+  );
 
   replaceOne(
     "{icon:'↗',title:'将来の資産額',desc:'今の積立を続けると、いくらになるか',context:'入力した条件で積み立てた場合',guide:'将来額は、運用期間と利回りの影響を大きく受けます。まず無理なく継続できる積立額を基準に確認しましょう。'},",
@@ -45,6 +58,12 @@
     "function activeKeys(){return mode===0?['monthly','years','rate']:mode===1?['target','monthly','rate']:mode===2?['target','years','rate']:['target','monthly','years']}",
     "function activeKeys(){return mode===0?['initial','monthly','years','rate']:mode===1?['target','monthly','rate']:mode===2?['target','years','rate']:['target','monthly','years']}",
     '将来資産モードの入力項目'
+  );
+
+  replaceOne(
+    "function renderFields(){fields.innerHTML='';activeKeys().forEach(k=>fields.appendChild(makeField(k)));",
+    "function renderFields(){fields.innerHTML='';fields.classList.toggle('compact-investment',mode===0);activeKeys().forEach(k=>fields.appendChild(makeField(k)));",
+    '将来資産モードの2列表示'
   );
 
   replaceOne(
