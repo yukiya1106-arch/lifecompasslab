@@ -4,11 +4,11 @@
     const names=['part-0.txt','part-1.txt','part-2.txt','part-3.txt','part-4.txt'];
     const [encoded,rawEnhancement]=await Promise.all([
       Promise.all(names.map(async name=>{
-        const response=await fetch(name+'?v=19',{cache:'no-store'});
+        const response=await fetch(name+'?v=20',{cache:'no-store'});
         if(!response.ok)throw new Error(name);
         return response.text();
       })).then(parts=>parts.join('')),
-      fetch('./enhancements-v9.js?v=19',{cache:'no-store'}).then(response=>{
+      fetch('./enhancements-v9.js?v=20',{cache:'no-store'}).then(response=>{
         if(!response.ok)throw new Error('enhancements-v9.js');
         return response.text();
       })
@@ -20,7 +20,7 @@
       '"react-dom/client": "https://esm.sh/react-dom@19.2.0/client"',
       '"react-dom": "https://esm.sh/react-dom@19.2.0",\n      "react-dom/client": "https://esm.sh/react-dom@19.2.0/client"'
     );
-    const assetUrl=new URL('./asset-inline-v19.html?v=19',window.location.href).href;
+    const assetUrl=new URL('./asset-inline-v19.html?v=20',window.location.href).href;
     const enhancement=rawEnhancement.replace('__ASSET_URL__',assetUrl.replace(/'/g,'%27'));
     const frame=document.createElement('iframe');
     frame.title='COMPASS Tools プレビュー';
@@ -28,8 +28,8 @@
     frame.srcdoc=html;
     frame.addEventListener('load',()=>{
       try{
-        frame.contentWindow.eval(enhancement+'\n//# sourceURL=compass-tools-preview-enhancements-v19.js');
-        frame.contentDocument.documentElement.dataset.compassToolsPreview='v19';
+        frame.contentWindow.eval(enhancement+'\n//# sourceURL=compass-tools-preview-enhancements-v20.js');
+        frame.contentDocument.documentElement.dataset.compassToolsPreview='v20';
         if(loading)loading.remove();
       }catch(error){
         console.error(error);
