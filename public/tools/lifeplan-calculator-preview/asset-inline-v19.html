@@ -10,7 +10,7 @@
 <div class="status" id="status">資産形成画面を読み込んでいます…</div>
 <script>
 (async()=>{
-  const response=await fetch('./asset-inline-v16.html?v=20',{cache:'no-store'});
+  const response=await fetch('./asset-inline-v16.html?v=21',{cache:'no-store'});
   if(!response.ok)throw new Error('元の資産形成画面を読み込めませんでした。');
   let html=await response.text();
   const replaceOne=(before,after,label)=>{
@@ -31,9 +31,28 @@
 .fields.compact-investment .value-box{width:128px}
 .fields.compact-investment .field-control{grid-template-columns:1fr;gap:8px;margin-top:10px}
 .fields.compact-investment .presets{justify-content:flex-start}
-@media(max-width:700px){.fields.compact-investment{grid-template-columns:1fr}.fields.compact-investment .value-box{width:136px}}
+.mode-card.withdraw-mode{grid-column:1/-1}
+@media(max-width:700px){.fields.compact-investment{grid-template-columns:1fr}.fields.compact-investment .value-box{width:136px}.mode-card.withdraw-mode{grid-column:auto}}
 </style>`,
     '運用条件のコンパクト表示'
+  );
+
+  replaceOne(
+    '<div class="metric surface"><span class="metric-label"><i class="metric-dot total"></i>最終資産</span><strong id="totalValue"></strong><small>投資元本と運用成果の合計</small></div>\n<div class="metric surface"><span class="metric-label"><i class="metric-dot principal"></i>投資元本</span><strong id="principalValue"></strong><small>初期投資額と毎月の積立額の合計</small></div>\n<div class="metric surface"><span class="metric-label"><i class="metric-dot gain"></i>運用で増えた額</span><strong id="gainValue"></strong><small id="gainNote">想定利回りによる運用成果</small></div>',
+    '<div class="metric surface"><span class="metric-label"><i class="metric-dot total"></i><span id="totalLabel">最終資産</span></span><strong id="totalValue"></strong><small id="totalNote">投資元本と運用成果の合計</small></div>\n<div class="metric surface"><span class="metric-label"><i class="metric-dot principal"></i><span id="principalLabel">投資元本</span></span><strong id="principalValue"></strong><small id="principalNote">初期投資額と毎月の積立額の合計</small></div>\n<div class="metric surface"><span class="metric-label"><i class="metric-dot gain"></i><span id="gainLabel">運用で増えた額</span></span><strong id="gainValue"></strong><small id="gainNote">想定利回りによる運用成果</small></div>',
+    '結果指標の動的表示'
+  );
+
+  replaceOne(
+    '<div class="chart-head"><div><div class="step-label"><span class="step-no">4</span>推移を確認</div><h2>資産の育ち方を見る</h2><p class="section-copy">棒全体が資産額です。投資元本と運用成果を分けて表示します。</p></div><div class="legend"><span><i class="sw p"></i>投資元本</span><span><i class="sw g"></i>運用で増えた額</span></div></div>',
+    '<div class="chart-head"><div><div class="step-label"><span class="step-no">4</span>推移を確認</div><h2 id="chartTitle">資産の育ち方を見る</h2><p class="section-copy" id="chartCopy">棒全体が資産額です。投資元本と運用成果を分けて表示します。</p></div><div class="legend"><span id="legendPrimary"><i class="sw p"></i><b id="legendPrimaryText">投資元本</b></span><span id="legendSecondary"><i class="sw g"></i><b id="legendSecondaryText">運用で増えた額</b></span></div></div>',
+    'グラフ見出しの動的表示'
+  );
+
+  replaceOne(
+    '<p class="chart-note">棒を選択すると、その時点の内訳を確認できます。</p>',
+    '<p class="chart-note" id="chartNote">棒を選択すると、その時点の内訳を確認できます。</p>',
+    'グラフ注記の動的表示'
   );
 
   replaceOne(
@@ -43,21 +62,39 @@
   );
 
   replaceOne(
+    "{icon:'%',title:'必要な利回り',desc:'今の積立額で必要な運用水準を確認',context:'目標金額を達成するための想定利回り',guide:'必要利回りが高いほど、価格変動リスクも大きくなります。現実的でない場合は、積立額・期間・目標額を先に見直しましょう。'}",
+    "{icon:'%',title:'必要な利回り',desc:'今の積立額で必要な運用水準を確認',context:'目標金額を達成するための想定利回り',guide:'必要利回りが高いほど、価格変動リスクも大きくなります。現実的でない場合は、積立額・期間・目標額を先に見直しましょう。'},\n{icon:'↓',title:'取り崩し期間',desc:'運用しながら使うと、資産が何年持つか',context:'入力した条件で運用しながら取り崩した場合',guide:'取り崩し期間は、一定の利回りが続く前提の概算です。実際には価格変動があるため、必要資金に余裕を持たせて確認しましょう。'}",
+    '取り崩しモードの追加'
+  );
+
+  replaceOne(
     "const defs={\ntarget:",
-    "const defs={\ninitial:{label:'初期投資額',unit:'万円',min:0,max:10000,step:10,presets:[0,500,1000,3000]},\ntarget:",
-    '初期投資額の入力定義'
+    "const defs={\ninitial:{label:'初期投資額',unit:'万円',min:0,max:10000,step:10,presets:[0,500,1000,3000]},\nstartAsset:{label:'開始資産額',unit:'万円',min:0,max:10000,step:10,presets:[500,1000,2000,3000]},\nwithdrawMonthly:{label:'毎月取り崩し額',unit:'万円',min:0,max:100,step:.1,presets:[5,10,15,20]},\ntarget:",
+    '初期投資額と取り崩し入力の定義'
   );
 
   replaceOne(
     "const defaults={target:1000,monthly:3,years:20,rate:2};",
-    "const defaults={initial:0,target:1000,monthly:3,years:20,rate:2};",
+    "const defaults={initial:0,startAsset:1000,withdrawMonthly:10,target:1000,monthly:3,years:20,rate:2};",
     '初期値'
   );
 
   replaceOne(
+    "const requiredRate=(target,monthly,months)=>{const principal=monthly*months;if(target<=principal)return 0;let lo=0,hi=50;if(fv(monthly,hi,months)<target)return 50;for(let i=0;i<80;i++){const mid=(lo+hi)/2;if(fv(monthly,mid,months)>=target)hi=mid;else lo=mid}return hi};",
+    "const requiredRate=(target,monthly,months)=>{const principal=monthly*months;if(target<=principal)return 0;let lo=0,hi=50;if(fv(monthly,hi,months)<target)return 50;for(let i=0;i<80;i++){const mid=(lo+hi)/2;if(fv(monthly,mid,months)>=target)hi=mid;else lo=mid}return hi};\nconst withdrawalCalc=(start,withdrawal,annual,limit=1200)=>{let balance=Math.max(0,start),withdrawn=0,gain=0;const r=mr(annual);if(balance<=0)return{months:0,balance:0,withdrawn:0,gain:0,sustainable:false};if(withdrawal<=0){const grown=balance*Math.pow(1+r,limit);return{months:limit,balance:grown,withdrawn:0,gain:Math.max(0,grown-start),sustainable:true}}for(let n=1;n<=limit;n++){const before=balance;balance=before*(1+r);gain+=balance-before;const actual=Math.min(withdrawal,balance);balance-=actual;withdrawn+=actual;if(balance<=.5)return{months:n,balance:0,withdrawn,gain:Math.max(0,gain),sustainable:false}}return{months:limit,balance,withdrawn,gain:Math.max(0,gain),sustainable:true}};",
+    '取り崩し計算式'
+  );
+
+  replaceOne(
     "function activeKeys(){return mode===0?['monthly','years','rate']:mode===1?['target','monthly','rate']:mode===2?['target','years','rate']:['target','monthly','years']}",
-    "function activeKeys(){return mode===0?['initial','monthly','years','rate']:mode===1?['target','monthly','rate']:mode===2?['target','years','rate']:['target','monthly','years']}",
-    '将来資産モードの入力項目'
+    "function activeKeys(){return mode===0?['initial','monthly','years','rate']:mode===1?['target','monthly','rate']:mode===2?['target','years','rate']:mode===3?['target','monthly','years']:['startAsset','withdrawMonthly','rate']}",
+    'モード別の入力項目'
+  );
+
+  replaceOne(
+    "function renderModes(){modeGrid.innerHTML='';modes.forEach((m,i)=>{const b=document.createElement('button');b.type='button';b.className='mode-card'+(i===mode?' active':'');b.innerHTML=`<span class=\"mode-icon\">${m.icon}</span><span><span class=\"mode-title\">${m.title}</span><span class=\"mode-desc\">${m.desc}</span></span><span class=\"mode-check\">✓</span>`;b.onclick=()=>{mode=i;render()};modeGrid.appendChild(b)})}",
+    "function renderModes(){modeGrid.innerHTML='';modes.forEach((m,i)=>{const b=document.createElement('button');b.type='button';b.className='mode-card'+(i===mode?' active':'')+(i===4?' withdraw-mode':'');b.innerHTML=`<span class=\"mode-icon\">${m.icon}</span><span><span class=\"mode-title\">${m.title}</span><span class=\"mode-desc\">${m.desc}</span></span><span class=\"mode-check\">✓</span>`;b.onclick=()=>{mode=i;render()};modeGrid.appendChild(b)})}",
+    '取り崩しカードの表示'
   );
 
   replaceOne(
@@ -68,26 +105,50 @@
 
   replaceOne(
     "const titles=['現在の積立条件','目標と現在の積立条件','目標と運用期間','目標・積立額・期間'];const copies=['毎月の積立額、期間、想定利回りを入力してください。','目標額、毎月の積立額、想定利回りを入力してください。','目標額、運用期間、想定利回りを入力してください。','目標額、毎月の積立額、運用期間を入力してください。'];",
-    "const titles=['現在の運用条件','目標と現在の積立条件','目標と運用期間','目標・積立額・期間'];const copies=['初期投資額と毎月の積立額、期間、想定利回りを入力してください。','目標額、毎月の積立額、想定利回りを入力してください。','目標額、運用期間、想定利回りを入力してください。','目標額、毎月の積立額、運用期間を入力してください。'];",
+    "const titles=['現在の運用条件','目標と現在の積立条件','目標と運用期間','目標・積立額・期間','取り崩し条件'];const copies=['初期投資額と毎月の積立額、期間、想定利回りを入力してください。','目標額、毎月の積立額、想定利回りを入力してください。','目標額、運用期間、想定利回りを入力してください。','目標額、毎月の積立額、運用期間を入力してください。','開始資産額、毎月取り崩し額、想定利回りを入力してください。'];",
     '入力欄の見出しと説明'
   );
 
   replaceOne(
     "function result(){let months=Math.round(state.years*12),monthly=state.monthly*10000,rate=state.rate,total=0,warning='';if(mode===0){total=fv(monthly,rate,months)}else if(mode===1){months=requiredMonths(state.target*10000,monthly,rate);total=fv(monthly,rate,months);if(months>=1200)warning='100年以内に目標額へ届かない条件です。積立額や目標額を見直してください。'}else if(mode===2){monthly=requiredMonthly(state.target*10000,rate,months);total=fv(monthly,rate,months)}else{rate=requiredRate(state.target*10000,monthly,months);total=fv(monthly,rate,months);if(rate>=50)warning='必要利回りが50%以上となる条件です。積立額・期間・目標額の見直しをおすすめします。'}const principal=monthly*months,gain=Math.max(0,total-principal);return{months,monthly,rate,total,principal,gain,warning}}",
-    "function result(){let months=Math.round(state.years*12),monthly=state.monthly*10000,rate=state.rate,total=0,warning='',initial=mode===0?state.initial*10000:0;if(mode===0){total=initial*Math.pow(1+mr(rate),months)+fv(monthly,rate,months)}else if(mode===1){months=requiredMonths(state.target*10000,monthly,rate);total=fv(monthly,rate,months);if(months>=1200)warning='100年以内に目標額へ届かない条件です。積立額や目標額を見直してください。'}else if(mode===2){monthly=requiredMonthly(state.target*10000,rate,months);total=fv(monthly,rate,months)}else{rate=requiredRate(state.target*10000,monthly,months);total=fv(monthly,rate,months);if(rate>=50)warning='必要利回りが50%以上となる条件です。積立額・期間・目標額の見直しをおすすめします。'}const principal=initial+monthly*months,gain=Math.max(0,total-principal);return{months,monthly,rate,total,principal,gain,warning,initial}}",
-    '将来資産の計算式'
+    "function result(){let months=Math.round(state.years*12),monthly=state.monthly*10000,rate=state.rate,total=0,warning='',initial=mode===0?state.initial*10000:0;if(mode===0){total=initial*Math.pow(1+mr(rate),months)+fv(monthly,rate,months)}else if(mode===1){months=requiredMonths(state.target*10000,monthly,rate);total=fv(monthly,rate,months);if(months>=1200)warning='100年以内に目標額へ届かない条件です。積立額や目標額を見直してください。'}else if(mode===2){monthly=requiredMonthly(state.target*10000,rate,months);total=fv(monthly,rate,months)}else if(mode===3){rate=requiredRate(state.target*10000,monthly,months);total=fv(monthly,rate,months);if(rate>=50)warning='必要利回りが50%以上となる条件です。積立額・期間・目標額の見直しをおすすめします。'}else{initial=state.startAsset*10000;const withdrawMonthly=state.withdrawMonthly*10000,sim=withdrawalCalc(initial,withdrawMonthly,rate);months=sim.months;total=sim.balance;if(withdrawMonthly<=0)warning='毎月取り崩し額が0円のため、資産は取り崩されません。';else if(sim.sustainable)warning='一定の条件では100年以上維持できる試算です。実際の運用では価格変動がある点にご注意ください。';return{months,monthly:0,rate,total,principal:initial,gain:sim.gain,warning,initial,withdrawMonthly,withdrawn:sim.withdrawn,sustainable:sim.sustainable}}const principal=initial+monthly*months,gain=Math.max(0,total-principal);return{months,monthly,rate,total,principal,gain,warning,initial}}",
+    '将来資産と取り崩しの計算式'
+  );
+
+  replaceOne(
+    "function answer(r){if(mode===0)return man(r.total);if(mode===1)return period(r.months);if(mode===2)return Math.ceil(r.monthly).toLocaleString('ja-JP')+'円／月';return r.rate.toFixed(1)+'%／年'}",
+    "function answer(r){if(mode===0)return man(r.total);if(mode===1)return period(r.months);if(mode===2)return Math.ceil(r.monthly).toLocaleString('ja-JP')+'円／月';if(mode===3)return r.rate.toFixed(1)+'%／年';return r.sustainable?'100年以上':period(r.months)}",
+    '取り崩し期間の回答表示'
   );
 
   replaceOne(
     "function conditionRows(r){const rows=[];if(mode!==1&&mode!==2&&mode!==3){}if(mode!==1)rows.push(['運用期間',period(r.months)]);if(mode!==2)rows.push(['毎月積立額',man(r.monthly)]);if(mode!==3)rows.push(['想定利回り',r.rate.toFixed(1)+'%']);if(mode!==0)rows.unshift(['目標額',state.target.toLocaleString('ja-JP')+'万円']);return rows.slice(0,4)}",
-    "function conditionRows(r){if(mode===0)return[['初期投資額',man(r.initial)],['運用期間',period(r.months)],['毎月積立額',man(r.monthly)],['想定利回り',r.rate.toFixed(1)+'%']];const rows=[];if(mode!==1)rows.push(['運用期間',period(r.months)]);if(mode!==2)rows.push(['毎月積立額',man(r.monthly)]);if(mode!==3)rows.push(['想定利回り',r.rate.toFixed(1)+'%']);rows.unshift(['目標額',state.target.toLocaleString('ja-JP')+'万円']);return rows.slice(0,4)}",
+    "function conditionRows(r){if(mode===0)return[['初期投資額',man(r.initial)],['運用期間',period(r.months)],['毎月積立額',man(r.monthly)],['想定利回り',r.rate.toFixed(1)+'%']];if(mode===4)return[['開始資産額',man(r.initial)],['毎月取り崩し額',man(r.withdrawMonthly)],['想定利回り',r.rate.toFixed(1)+'%'],['計算期間',r.sustainable?'100年以上':period(r.months)]];const rows=[];if(mode!==1)rows.push(['運用期間',period(r.months)]);if(mode!==2)rows.push(['毎月積立額',man(r.monthly)]);if(mode!==3)rows.push(['想定利回り',r.rate.toFixed(1)+'%']);rows.unshift(['目標額',state.target.toLocaleString('ja-JP')+'万円']);return rows.slice(0,4)}",
     '結果欄の条件表示'
   );
 
   replaceOne(
     "function points(r){const years=Math.max(1,Math.ceil(r.months/12));const interval=years<=30?1:years<=60?2:5;const arr=[];for(let y=interval;y*12<=r.months;y+=interval)arr.push(y*12);if(!arr.length||arr[arr.length-1]!==r.months)arr.push(r.months);return arr.map(m=>{const principal=r.monthly*m,total=fv(r.monthly,r.rate,m);return{m,principal,gain:Math.max(0,total-principal),total}})}",
-    "function points(r){const years=Math.max(1,Math.ceil(r.months/12));const interval=years<=30?1:years<=60?2:5;const arr=[];for(let y=interval;y*12<=r.months;y+=interval)arr.push(y*12);if(!arr.length||arr[arr.length-1]!==r.months)arr.push(r.months);return arr.map(m=>{const initial=r.initial||0,principal=initial+r.monthly*m,total=initial*Math.pow(1+mr(r.rate),m)+fv(r.monthly,r.rate,m);return{m,principal,gain:Math.max(0,total-principal),total}})}",
+    "function points(r){const years=Math.max(1,Math.ceil(r.months/12));const interval=years<=30?1:years<=60?2:5;const arr=[];if(mode===4)arr.push(0);for(let y=interval;y*12<=r.months;y+=interval)arr.push(y*12);if(!arr.length||arr[arr.length-1]!==r.months)arr.push(r.months);if(mode===4)return arr.map(m=>{if(m===0)return{m,total:r.initial,balance:r.initial,withdrawn:0,gain:0};const p=withdrawalCalc(r.initial,r.withdrawMonthly,r.rate,m);return{m,total:p.balance,balance:p.balance,withdrawn:p.withdrawn,gain:p.gain}});return arr.map(m=>{const initial=r.initial||0,principal=initial+r.monthly*m,total=initial*Math.pow(1+mr(r.rate),m)+fv(r.monthly,r.rate,m);return{m,principal,gain:Math.max(0,total-principal),total}})}",
     '資産推移グラフの計算式'
+  );
+
+  replaceOne(
+    "function showTip(p,button){document.querySelectorAll('.barbtn').forEach(b=>b.classList.remove('selected'));if(button)button.classList.add('selected');document.getElementById('tip').innerHTML=`<div class=\"tip-period\">${period(p.m)}時点</div><div class=\"tip-line\"><span>投資元本</span><strong>${yen(p.principal)}</strong></div><div class=\"tip-line\"><span>運用で増えた額</span><strong>${yen(p.gain)}</strong></div><div class=\"tip-line\"><span>合計</span><strong>${yen(p.total)}</strong></div>`}",
+    "function showTip(p,button){document.querySelectorAll('.barbtn').forEach(b=>b.classList.remove('selected'));if(button)button.classList.add('selected');if(mode===4){document.getElementById('tip').innerHTML=`<div class=\"tip-period\">${p.m===0?'開始時':period(p.m)+'時点'}</div><div class=\"tip-line\"><span>資産残高</span><strong>${yen(p.balance)}</strong></div><div class=\"tip-line\"><span>累計取り崩し額</span><strong>${yen(p.withdrawn)}</strong></div><div class=\"tip-line\"><span>運用で補えた額</span><strong>${yen(p.gain)}</strong></div>`;return}document.getElementById('tip').innerHTML=`<div class=\"tip-period\">${period(p.m)}時点</div><div class=\"tip-line\"><span>投資元本</span><strong>${yen(p.principal)}</strong></div><div class=\"tip-line\"><span>運用で増えた額</span><strong>${yen(p.gain)}</strong></div><div class=\"tip-line\"><span>合計</span><strong>${yen(p.total)}</strong></div>`}",
+    '取り崩しグラフの詳細表示'
+  );
+
+  replaceOne(
+    "function draw(r){const data=points(r),max=Math.max(...data.map(x=>x.total),1),bars=document.getElementById('bars');bars.innerHTML='';document.querySelector('.chart-stage').style.minWidth=Math.max(650,data.length*38)+'px';const marks=new Set([0,Math.floor((data.length-1)/2),data.length-1]);data.forEach((p,i)=>{const h=Math.max(2,Math.round(p.total/max*250)),ratio=p.total>0?p.principal/p.total:1,ph=Math.max(1,Math.round(ratio*h)),gh=Math.max(0,h-ph),col=document.createElement('div'),b=document.createElement('button');col.className='barcol';b.type='button';b.className='barbtn'+(i===data.length-1?' selected':'');b.innerHTML=`<span class=\"stack\" style=\"height:${h}px\"><span class=\"gain\" style=\"height:${gh}px\"></span><span class=\"principal\" style=\"height:${ph}px\"></span></span>`;b.onmouseenter=b.onfocus=b.onclick=()=>showTip(p,b);col.appendChild(b);if(marks.has(i)){const x=document.createElement('span');x.className='xlabel';x.textContent=period(p.m);col.appendChild(x)}bars.appendChild(col)});showTip(data[data.length-1],bars.querySelector('.barbtn:last-of-type'))}",
+    "function draw(r){const data=points(r),max=Math.max(...data.map(x=>x.total),mode===4?r.initial:1,1),bars=document.getElementById('bars');bars.innerHTML='';document.querySelector('.chart-stage').style.minWidth=Math.max(650,data.length*38)+'px';const marks=new Set([0,Math.floor((data.length-1)/2),data.length-1]);data.forEach((p,i)=>{const h=Math.max(2,Math.round(p.total/max*250)),col=document.createElement('div'),b=document.createElement('button');col.className='barcol';b.type='button';b.className='barbtn'+(i===data.length-1?' selected':'');if(mode===4){b.innerHTML=`<span class=\"stack\" style=\"height:${h}px\"><span class=\"principal\" style=\"height:${h}px\"></span></span>`}else{const ratio=p.total>0?p.principal/p.total:1,ph=Math.max(1,Math.round(ratio*h)),gh=Math.max(0,h-ph);b.innerHTML=`<span class=\"stack\" style=\"height:${h}px\"><span class=\"gain\" style=\"height:${gh}px\"></span><span class=\"principal\" style=\"height:${ph}px\"></span></span>`}b.onmouseenter=b.onfocus=b.onclick=()=>showTip(p,b);col.appendChild(b);if(marks.has(i)){const x=document.createElement('span');x.className='xlabel';x.textContent=mode===4&&p.m===0?'開始時':period(p.m);col.appendChild(x)}bars.appendChild(col)});showTip(data[data.length-1],bars.querySelector('.barbtn:last-of-type'))}",
+    '取り崩し専用グラフ'
+  );
+
+  replaceOne(
+    "function calculate(){const r=result();document.getElementById('resultContext').textContent=modes[mode].context;document.getElementById('resultValue').textContent=answer(r);document.getElementById('resultSub').textContent=mode===0?'将来の金額は一定の利回りで運用できた場合の概算です。':mode===1?'目標額へ初めて到達する月までを表示しています。':mode===2?'毎月積み立てる必要がある概算額です。':'目標達成に必要となる一定利回りの概算です。';const list=document.getElementById('conditionList');list.innerHTML='';conditionRows(r).forEach(([k,v])=>{const row=document.createElement('div');row.className='condition-row';row.innerHTML=`<span>${k}</span><b>${v}</b>`;list.appendChild(row)});const w=document.getElementById('warning');w.hidden=!r.warning;w.textContent=r.warning;document.getElementById('totalValue').textContent=yen(r.total);document.getElementById('principalValue').textContent=yen(r.principal);document.getElementById('gainValue').textContent=yen(r.gain);const share=r.total>0?r.gain/r.total*100:0;document.getElementById('gainNote').textContent=`最終資産に占める割合 約${share.toFixed(1)}%`;document.getElementById('guideTitle').textContent='この結果の見方';document.getElementById('guideText').textContent=modes[mode].guide;draw(r);notifyHeight()}",
+    "function calculate(){const r=result(),withdrawing=mode===4;document.getElementById('resultContext').textContent=modes[mode].context;document.getElementById('resultValue').textContent=answer(r);document.getElementById('resultSub').textContent=mode===0?'将来の金額は一定の利回りで運用できた場合の概算です。':mode===1?'目標額へ初めて到達する月までを表示しています。':mode===2?'毎月積み立てる必要がある概算額です。':mode===3?'目標達成に必要となる一定利回りの概算です。':r.sustainable?'100年時点でも資産が残る条件です。':'資産残高が0円になる月までを表示しています。';const list=document.getElementById('conditionList');list.innerHTML='';conditionRows(r).forEach(([k,v])=>{const row=document.createElement('div');row.className='condition-row';row.innerHTML=`<span>${k}</span><b>${v}</b>`;list.appendChild(row)});const w=document.getElementById('warning');w.hidden=!r.warning;w.textContent=r.warning;const totalLabel=document.getElementById('totalLabel'),principalLabel=document.getElementById('principalLabel'),gainLabel=document.getElementById('gainLabel'),totalNote=document.getElementById('totalNote'),principalNote=document.getElementById('principalNote'),gainNote=document.getElementById('gainNote'),legendSecondary=document.getElementById('legendSecondary');if(withdrawing){totalLabel.textContent='開始資産額';principalLabel.textContent='累計取り崩し額';gainLabel.textContent='運用で補えた額';totalNote.textContent='取り崩し開始時点の資産';principalNote.textContent='期間中に受け取った金額の累計';gainNote.textContent='運用収益により追加で受け取れた金額';document.getElementById('totalValue').textContent=yen(r.initial);document.getElementById('principalValue').textContent=yen(r.withdrawn);document.getElementById('gainValue').textContent=yen(r.gain);document.getElementById('chartTitle').textContent='資産残高の推移';document.getElementById('chartCopy').textContent='運用しながら取り崩した場合の資産残高を表示します。';document.getElementById('legendPrimaryText').textContent='資産残高';legendSecondary.hidden=true;document.getElementById('chartNote').textContent='棒を選択すると、資産残高と累計取り崩し額を確認できます。'}else{totalLabel.textContent='最終資産';principalLabel.textContent='投資元本';gainLabel.textContent='運用で増えた額';totalNote.textContent='投資元本と運用成果の合計';principalNote.textContent='初期投資額と毎月の積立額の合計';document.getElementById('totalValue').textContent=yen(r.total);document.getElementById('principalValue').textContent=yen(r.principal);document.getElementById('gainValue').textContent=yen(r.gain);const share=r.total>0?r.gain/r.total*100:0;gainNote.textContent=`最終資産に占める割合 約${share.toFixed(1)}%`;document.getElementById('chartTitle').textContent='資産の育ち方を見る';document.getElementById('chartCopy').textContent='棒全体が資産額です。投資元本と運用成果を分けて表示します。';document.getElementById('legendPrimaryText').textContent='投資元本';document.getElementById('legendSecondaryText').textContent='運用で増えた額';legendSecondary.hidden=false;document.getElementById('chartNote').textContent='棒を選択すると、その時点の内訳を確認できます。'}document.getElementById('guideTitle').textContent='この結果の見方';document.getElementById('guideText').textContent=modes[mode].guide;draw(r);notifyHeight()}",
+    '取り崩しモードの結果表示'
   );
 
   document.open();
