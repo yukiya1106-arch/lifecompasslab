@@ -47,7 +47,7 @@ export const tools: Tool[] = [
     status: "公開中",
     description:
       "退職後の資金計画、税金、年金受取時期など、老後の生活設計における「お金の確認」を目的別にサポートするシミュレーションプラットフォームです。退職金、企業型DC、iDeCo、公的年金など、退職前後に整理しておきたい論点を見える化します。",
-    url: "https://remix-compass-201056094402.asia-east1.run.app/",
+    url: "/lifecompasslab/tools/retirement-compass/",
     buttonLabel: "試してみる",
     icon: "compass",
     featured: true,
