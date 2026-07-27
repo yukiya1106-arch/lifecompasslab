@@ -9,6 +9,16 @@ export type LabLog = {
 
 export const labLogs: LabLog[] = [
   {
+    date: "2026.07.27",
+    title: "リタイアメントCOMPASSの計算ロジックを修正",
+    summary:
+      "退職金・DC/iDeCoの受取時期と課税関係を、計算過程まで確認しやすい構成へ見直しました。",
+    body:
+      "会社退職金の額面、退職所得控除、課税退職所得、概算税額を順番に確認できるようにし、その後にDC/iDeCoをいつ受け取るか、一時金・年金・併用のどれで受け取るかを比較できる構成へ整理しました。過去の一時金との重複期間調整、60歳以降も掛金を続けた場合の加入期間と控除額、退職後資金の推移グラフも見直しています。",
+    linkLabel: "リタイアメントCOMPASSを開く",
+    linkUrl: "/lifecompasslab/tools/retirement-compass/",
+  },
+  {
     date: "2026.07.24",
     title: "COMPASS Toolsを正式公開",
     summary:
