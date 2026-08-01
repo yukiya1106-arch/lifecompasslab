@@ -571,7 +571,7 @@ function LabLogCard({
       <div>
         <h2 className="mb-2 text-xl font-semibold leading-snug text-navy md:text-2xl">{log.title}</h2>
         <p className="text-sm leading-7 text-sub md:text-base">{log.summary}</p>
-        {!compact && <p className="mt-3 text-sm leading-7 text-sub">{log.body}</p>}
+        {!compact && <p className="mt-3 whitespace-pre-line text-sm leading-7 text-sub">{log.body}</p>}
         {!compact && log.linkUrl && (
           <a
             href={log.linkUrl}
