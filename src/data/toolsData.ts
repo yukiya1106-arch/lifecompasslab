@@ -65,6 +65,18 @@ export const tools: Tool[] = [
     featured: false,
   },
   {
+    title: "LIFE PLAN BUILDER",
+    category: "ライフプラン / 家計管理 / 教育費 / 住宅購入 / 資産形成 / 保険",
+    categories: ["ライフプラン", "家計管理", "教育費", "住宅購入", "資産形成", "保険"],
+    status: "公開中",
+    description:
+      "家族構成や収入、住まい、教育費、資産運用、保険などを入力し、将来の収入・支出と資産残高を見える化するライフプランシミュレーターです。会社員だけでなく、自営業・フリーランスにも対応。老後資金だけでなく、万一の際の必要保障額も概算できます。",
+    url: "/lifecompasslab/tools/life-plan-builder/",
+    buttonLabel: "試してみる",
+    icon: "chart",
+    featured: true,
+  },
+  {
     title: "COMPASS PLAN LIGHT",
     category: "ライフプラン / 家計管理 / 教育費 / 住宅購入",
     categories: ["ライフプラン", "家計管理", "教育費", "住宅購入", "資産形成", "保険"],
@@ -74,7 +86,7 @@ export const tools: Tool[] = [
     url: "/lifecompasslab/tools/kakei-compass-mini/",
     buttonLabel: "試してみる",
     icon: "chart",
-    featured: true,
+    featured: false,
   },
   {
     title: "COMPASS Tools",
