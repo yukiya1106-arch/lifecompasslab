@@ -4,10 +4,59 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>リタイアメントCOMPASS | LIFE COMPASS LAB</title>
+    <style>
+      .lcl-home-link {
+        position: fixed;
+        top: 14px;
+        left: 14px;
+        z-index: 10000;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 38px;
+        padding: 7px 11px;
+        border: 1px solid rgba(11, 42, 91, 0.14);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.92);
+        color: #0b2a5b;
+        font: 700 12px/1.2 system-ui, -apple-system, "Segoe UI", "Noto Sans JP", sans-serif;
+        text-decoration: none;
+        box-shadow: 0 10px 28px rgba(11, 42, 91, 0.1);
+        backdrop-filter: blur(12px);
+      }
+      .lcl-home-link img {
+        width: 20px;
+        height: 20px;
+      }
+      .lcl-home-link small {
+        color: #2f80ed;
+        font-size: 10px;
+        font-weight: 700;
+      }
+      .lcl-home-link:hover {
+        border-color: rgba(47, 128, 237, 0.45);
+        background: #ffffff;
+      }
+      @media (max-width: 640px) {
+        .lcl-home-link {
+          top: 10px;
+          left: 10px;
+          padding: 7px 9px;
+        }
+        .lcl-home-link span {
+          display: none;
+        }
+      }
+    </style>
     <script type="module" crossorigin src="/lifecompasslab/tools/retirement-compass/assets/index-lBMZ18GD.js"></script>
     <link rel="stylesheet" crossorigin href="/lifecompasslab/tools/retirement-compass/assets/index-Ctl0ty5a.css">
   </head>
   <body>
+    <a class="lcl-home-link" href="/lifecompasslab/" aria-label="LIFE COMPASS LAB ホームへ">
+      <img src="/lifecompasslab/favicon.svg" alt="">
+      <span>LIFE COMPASS LAB</span>
+      <small>ホームへ</small>
+    </a>
     <div id="root"></div>
   </body>
 </html>

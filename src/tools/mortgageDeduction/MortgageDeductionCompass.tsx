@@ -1096,14 +1096,25 @@ export default function App() {
           HEADER SECTION
           ========================================== */}
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-700 rounded flex items-center justify-center text-white font-bold text-xl select-none shrink-0">C</div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 id="app-title" className="text-lg font-bold text-blue-900 leading-none">住宅ローン控除COMPASS</h1>
-              <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full uppercase tracking-wider">概算シミュレーション</span>
+        <div className="flex flex-col gap-2">
+          <a
+            href="#/"
+            className="inline-flex w-fit items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-bold text-blue-900 shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50"
+            aria-label="LIFE COMPASS LAB ホームへ"
+          >
+            <Home size={13} className="text-blue-700" />
+            <span>LIFE COMPASS LAB</span>
+            <span className="text-blue-600">ホームへ</span>
+          </a>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-700 rounded flex items-center justify-center text-white font-bold text-xl select-none shrink-0">C</div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 id="app-title" className="text-lg font-bold text-blue-900 leading-none">住宅ローン控除COMPASS</h1>
+                <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full uppercase tracking-wider">概算シミュレーション</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">ペアローン・育休・住宅性能による控除の使い切れなさを見える化</p>
             </div>
-            <p className="text-xs text-slate-500 mt-1">ペアローン・育休・住宅性能による控除の使い切れなさを見える化</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
