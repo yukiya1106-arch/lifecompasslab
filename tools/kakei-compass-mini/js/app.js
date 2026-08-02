@@ -150,7 +150,7 @@
 
   function header() {
     return `<header class="app-header"><div class="container header-inner">
-      <button class="brand" data-action="landing" aria-label="トップへ"><img src="assets/compass-logo.png" alt=""><span>COMPASS PLAN <small>light</small></span></button>
+      <a class="brand" href="/lifecompasslab/" aria-label="LIFE COMPASS LAB ホームへ"><img src="assets/compass-logo.png" alt=""><span>COMPASS PLAN <small>light</small></span></a>
       <div class="header-actions">
         <button class="btn btn-ghost btn-small hide-mobile" data-action="load-json">データ読込</button>
         <button class="btn btn-ghost btn-small hide-mobile" data-action="save-json">入力データ保存</button>

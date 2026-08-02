@@ -53,6 +53,20 @@ button{font-family:inherit;}
   display:flex;
   margin-bottom:16px;
 }
+.brand-home-link{
+  display:inline-flex;
+  align-items:center;
+  border-radius:8px;
+  text-decoration:none;
+  transition:transform .16s ease, box-shadow .16s ease;
+}
+.brand-home-link:focus-visible{
+  outline:3px solid rgba(255,255,255,.72);
+  outline-offset:4px;
+}
+.brand-home-link:hover{
+  transform:translateY(-1px);
+}
 .brand-logo{
   height:40px;
   width:auto;
@@ -432,7 +446,9 @@ footer{
 <header id="app-header">
   <div class="container">
     <div class="brand-row">
-      <img src="images/logo-life-compass-lab-v2.png" alt="LIFE COMPASS LAB" class="brand-logo" loading="eager">
+      <a class="brand-home-link" href="/lifecompasslab/" aria-label="LIFE COMPASS LAB ホームへ">
+        <img src="images/logo-life-compass-lab-v2.png" alt="LIFE COMPASS LAB" class="brand-logo" loading="eager">
+      </a>
     </div>
     <h1><span class="icon">🧭</span>年金受取シミュレーター</h1>
     <p class="subcopy">受取開始年齢と受け取り方で、手取りの見え方を比較</p>

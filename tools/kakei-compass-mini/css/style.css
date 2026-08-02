@@ -67,7 +67,7 @@ img{max-width:100%}
 /* App shell */
 .app-header{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.94);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
 .header-inner{height:72px;display:flex;align-items:center;justify-content:space-between;gap:20px}
-.brand{display:flex;align-items:center;gap:10px;border:0;background:transparent;padding:0;font-weight:850;color:var(--navy-900);letter-spacing:-.02em}
+.brand{display:flex;align-items:center;gap:10px;border:0;background:transparent;padding:0;font-weight:850;color:var(--navy-900);letter-spacing:-.02em;text-decoration:none}
 .brand img{width:39px;height:39px;object-fit:contain}
 .brand small{font-weight:700;color:var(--blue-500);letter-spacing:.04em}
 .header-actions{display:flex;gap:8px}
