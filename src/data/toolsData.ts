@@ -72,9 +72,21 @@ export const tools: Tool[] = [
     description:
       "家族構成や収入、住まい、教育費、資産運用、保険などを入力し、将来の収入・支出と資産残高を見える化するライフプランシミュレーターです。会社員だけでなく、自営業・フリーランスにも対応。老後資金だけでなく、万一の際の必要保障額も概算できます。",
     url: "/lifecompasslab/tools/life-plan-builder/",
-    buttonLabel: "試してみる",
+    buttonLabel: "無料で試してみる",
     icon: "chart",
     featured: true,
+  },
+  {
+    title: "LIFE PLAN BUILDER KIT",
+    category: "ライフプラン / AI活用 / FP・保険募集人向け",
+    categories: ["ライフプラン", "保険"],
+    status: "公開中",
+    description:
+      "完成済みのLIFE PLAN BUILDERを土台に、Google AI Studioで名称・配色・説明文などを自分仕様へ育てる制作キットです。操作ガイド、カスタマイズ用プロンプト、復旧方法をまとめた買い切り型の商品です。",
+    url: "https://note.com/yukiyaishii/n/n59a73b170344",
+    buttonLabel: "制作キットを見る",
+    icon: "chart",
+    featured: false,
   },
   {
     title: "COMPASS PLAN LIGHT",

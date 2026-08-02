@@ -9,6 +9,16 @@ export type LabLog = {
 
 export const labLogs: LabLog[] = [
   {
+    date: "2026.08.03",
+    title: "LIFE PLAN BUILDER KITを公開しました",
+    summary:
+      "完成済みのライフプランシミュレーターを土台に、自分仕様へ育てられる制作キットをnoteで公開しました。",
+    body:
+      "LIFE PLAN BUILDER v1.0の完成を受けて、FP・保険募集人の方や、自分専用のライフプランツールを作ってみたい方向けに「LIFE PLAN BUILDER KIT」を公開しました。\n\n完成済みのシミュレーターに加え、Google AI Studioで名称・配色・説明文などを変更するためのカスタマイズ用プロンプト、操作ガイド、トラブル時の復旧方法をまとめています。\n\nゼロから開発するのではなく、すでに動く土台から始められることが、このキットの特徴です。高額なライフプランシステムを導入するほどではないけれど、自分の相談スタイルに合ったツールを持ちたい方に活用していただければと思います。\n\n本商品は買い切り型です。個別の開発代行や継続的な操作支援は含まれません。",
+    linkLabel: "LIFE PLAN BUILDER KITを見る",
+    linkUrl: "https://note.com/yukiyaishii/n/n59a73b170344",
+  },
+  {
     date: "2026.08.02",
     title: "LIFE PLAN BUILDER v1.0が完成しました",
     summary:
