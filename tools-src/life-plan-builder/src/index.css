@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+:root {
+  --app-primary: #1e3a8a;
+  --app-accent: #2563eb;
+}
+
+.bg-app-primary {
+  background-color: var(--app-primary);
+}
+
+.text-app-primary {
+  color: var(--app-primary);
+}
+
+.border-app-primary {
+  border-color: var(--app-primary);
+}
+
+.bg-app-accent {
+  background-color: var(--app-accent);
+}
+
+.text-app-accent {
+  color: var(--app-accent);
+}
+
+.border-app-accent {
+  border-color: var(--app-accent);
+}
+
+.ring-app-accent {
+  --tw-ring-color: var(--app-accent);
+}
