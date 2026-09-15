@@ -450,7 +450,7 @@ function ContactPage() {
           <p className="mb-4 text-xs font-bold tracking-[0.22em] text-blue">CONTACT</p>
           <h1 className="mb-6 text-[clamp(2.8rem,7vw,5rem)] font-semibold leading-none text-navy">CONTACT</h1>
           <p className="max-w-sm text-base leading-8 text-sub md:text-lg">
-            LIFE COMPASS LABへのご意見・ご感想、不具合報告、改善のご提案、ご相談、取材・研修・協業などのお問い合わせを受け付けています。
+            LIFE COMPASS LABへのご意見・ご感想、不具合報告、改善のご提案などのお問い合わせを受け付けています。
           </p>
         </div>
         <div className="border-t border-blue/20 pt-8">
@@ -461,15 +461,11 @@ function ContactPage() {
           <div className="max-w-3xl space-y-4 text-base leading-8 text-sub md:text-lg">
             <p>LIFE COMPASS LABは、使っていただいた方の声をもとに少しずつ改善していきます。</p>
             <p>
-              ツールへのご意見・ご感想、不具合報告、改善アイデア、ご自身の場合について整理したい方からのご相談、取材・研修・協業などのお問い合わせを受け付けています。
+              ツールへのご意見・ご感想、不具合報告、改善アイデアなどのお問い合わせを受け付けています。
             </p>
             <p>
               お問い合わせ内容を確認のうえ、必要に応じて適切な方法をご案内します。すべてのお問い合わせへの回答をお約束するものではありませんので、あらかじめご了承ください。
             </p>
-            <p>
-              家計、住宅、資産形成、保険、退職後資金などの個別相談については、内容を確認したうえで、石井悠己也が所属するFP Office株式会社の相談窓口をご案内する場合があります。
-            </p>
-            <p>このフォームへの入力だけで、FP Office株式会社への相談申込みや顧客登録が行われることはありません。</p>
           </div>
           <div className="my-8 max-w-3xl border-y border-blue/20 bg-lightBlue/45 py-5 text-sm font-semibold leading-7 text-navy">
             このフォームには、住所、勤務先の詳細、金融機関の口座情報、マイナンバー、保険証券番号など、個人を直接特定できる情報や機微な情報は入力しないでください。
