@@ -650,7 +650,7 @@ function HomeContactSection() {
           <p className="mb-4 text-xs font-bold tracking-[0.22em] text-blue">CONTACT</p>
           <h2 className="mb-5 text-4xl font-semibold leading-tight md:text-5xl">CONTACT</h2>
           <p className="max-w-2xl text-base leading-8 text-white/74 md:text-lg">
-            LIFE COMPASS LABへのご意見・ご感想、不具合報告、改善のご提案、ご相談、取材・研修・協業などのお問い合わせを受け付けています。内容に応じて、適切な方法をご案内します。
+            LIFE COMPASS LABへのご意見・ご感想、不具合報告、改善のご提案などのお問い合わせを受け付けています。内容に応じて、適切な方法をご案内します。
           </p>
         </div>
         <a
